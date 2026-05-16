@@ -1,0 +1,61 @@
+2026-02-28 15:26:28.850 [info] Extension host with pid 1215774 started
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] Detecting sandbox support...
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] Platform: linux, Shell type: unknown
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] dirname: /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/out/vs/workbench/api/node
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] Sandbox helper path: /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/resources/helpers/cursorsandbox
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] process.resourcesPath: undefined
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] process.execPath: /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/node
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] ripgrep path for sandboxing: /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/resources/helpers/rg
+2026-02-28 15:26:28.851 [info] [shell-exec:sandbox] [isSandboxHelperSupported] Starting sandbox support check...
+2026-02-28 15:26:28.851 [info] [shell-exec:sandbox] [checkBinaryAvailable] Resolved binary path: /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/resources/helpers/cursorsandbox
+2026-02-28 15:26:28.851 [info] [shell-exec:sandbox] [checkBinaryAvailable] Binary path exists: true
+2026-02-28 15:26:28.851 [info] [shell-exec:sandbox] [isSandboxHelperSupported] Running preflight with binary: /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/resources/helpers/cursorsandbox
+2026-02-28 15:26:28.851 [info] [shell-exec:sandbox] [isSandboxHelperSupported] CWD: /root
+2026-02-28 15:26:28.851 [info] [shell-exec:sandbox] [isSandboxHelperSupported] Preflight succeeded, sandbox supported!
+2026-02-28 15:26:28.851 [info] [ExtHostShellExec] Sandbox support detected: true, platform: linux, kernelVersion: 6.8.0-90-generic
+2026-02-28 15:26:28.866 [info] Lock '/root/.cursor-server/data/User/workspaceStorage/8b9cc59c8d950a0521d9805f5d307721/vscode.lock': Lock acquired.
+2026-02-28 15:26:28.922 [info] [ExtHostShellExec] Initializing terminal executor with userTerminalHint: undefined
+2026-02-28 15:26:28.939 [info] ExtensionService#_doActivateExtension vscode.emmet, startup: false, activationEvent: 'onLanguage'
+2026-02-28 15:26:28.945 [info] ExtHostSearch [cursorIgnore] internal fileSearch start reason=cursorIgnoreCheck roots=1 include=**/.cursorignore maxResults=0 numThreads=(default) folderQueries=[{"cwd":"/www/wwwroot/whmcs","disregardIgnoreFiles":false,"disregardParentIgnoreFiles":true,"disregardGlobalIgnoreFiles":true,"ignoreSymlinks":false,"rgNoIgnore":false,"rgNoIgnoreParent":true,"rgNoIgnoreGlobal":true,"rgFollow":true}]
+2026-02-28 15:26:28.973 [info] ExtHostSearch /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/server/node_modules/@vscode/ripgrep/bin/rg --files --hidden --case-sensitive --no-require-git -g '**/.cursorignore' -g '!**/.git' -g '!**/.svn' -g '!**/.hg' -g '!**/.DS_Store' -g '!**/Thumbs.db' -g '!**/node_modules' -g '!**/bower_components' -g '!**/*.code-search' --no-ignore-parent --follow --no-config --no-ignore-global
+ - cwd: /www/wwwroot/whmcs
+ - Sibling clauses: {}
+2026-02-28 15:26:29.033 [info] ExtHostSearch Search finished. Stats: {"cmdTime":67,"fileWalkTime":67,"directoriesWalked":0,"filesWalked":0,"cmdResultCount":0}
+2026-02-28 15:26:29.034 [info] ExtHostSearch [cursorIgnore] internal fileSearch done in 89ms limitHit=false failed=false resultCount=0 cmdTime=67 fileWalkTime=67 providerTime=(unknown)
+2026-02-28 15:26:29.121 [info] Extension activated success: vscode.emmet — 181ms (code loading: 163ms, activate call: 18ms, activate resolved: 0ms)
+2026-02-28 15:26:29.122 [info] ExtensionService#_doActivateExtension anysphere.cursor-agent, startup: true, activationEvent: '*'
+2026-02-28 15:26:29.122 [info] ExtensionService#_doActivateExtension anysphere.cursor-agent-exec, startup: true, activationEvent: '*'
+2026-02-28 15:26:29.123 [info] ExtensionService#_doActivateExtension anysphere.cursor-polyfills-remote, startup: true, activationEvent: '*'
+2026-02-28 15:26:29.123 [info] ExtensionService#_doActivateExtension vscode.git-base, startup: true, activationEvent: '*', root cause: vscode.git
+2026-02-28 15:26:29.147 [error] No bundle location found for extension anysphere.cursor-agent
+2026-02-28 15:26:29.147 [error] No bundle location found for extension anysphere.cursor-agent-exec
+2026-02-28 15:26:29.147 [error] No bundle location found for extension anysphere.cursor-polyfills-remote
+2026-02-28 15:26:30.351 [info] Extension activated success: anysphere.cursor-polyfills-remote — 1218ms (code loading: 1217ms, activate call: 1ms, activate resolved: 0ms)
+2026-02-28 15:26:30.353 [info] Extension activated success: anysphere.cursor-agent — 574ms (code loading: 563ms, activate call: 3ms, activate resolved: 8ms)
+2026-02-28 15:26:30.382 [info] Extension activated success: vscode.git-base — 1258ms (code loading: 1258ms, activate call: 0ms, activate resolved: 0ms)
+2026-02-28 15:26:30.383 [info] ExtensionService#_doActivateExtension vscode.git, startup: true, activationEvent: '*'
+2026-02-28 15:26:30.383 [info] ExtensionService#_doActivateExtension vscode.github, startup: true, activationEvent: '*'
+2026-02-28 15:26:30.448 [info] ExtensionService#_doActivateExtension anysphere.cursor-mcp, startup: false, activationEvent: 'api', root cause: anysphere.cursor-agent-exec
+2026-02-28 15:26:30.475 [error] No bundle location found for extension anysphere.cursor-mcp
+2026-02-28 15:26:30.894 [info] Extension activated success: vscode.github — 486ms (code loading: 475ms, activate call: 4ms, activate resolved: 7ms)
+2026-02-28 15:26:31.012 [info] Extension activated success: anysphere.cursor-mcp — 553ms (code loading: 370ms, activate call: 1ms, activate resolved: 182ms)
+2026-02-28 15:26:31.076 [warning] Using default string since no string found in i18n bundle that has the key: Git local changes (working tree + index)
+2026-02-28 15:26:31.083 [info] Extension activated success: vscode.git — 672ms (code loading: 591ms, activate call: 3ms, activate resolved: 78ms)
+2026-02-28 15:26:31.315 [info] Extension activated success: anysphere.cursor-agent-exec — 2121ms (code loading: 1150ms, activate call: 6ms, activate resolved: 965ms)
+2026-02-28 15:26:31.316 [info] Eager extensions activated
+2026-02-28 15:26:31.317 [info] ExtensionService#_doActivateExtension anysphere.cursor-commits, startup: false, activationEvent: 'onStartupFinished'
+2026-02-28 15:26:31.318 [info] ExtensionService#_doActivateExtension anysphere.cursor-retrieval, startup: false, activationEvent: 'onStartupFinished'
+2026-02-28 15:26:31.318 [info] ExtensionService#_doActivateExtension anysphere.cursor-shadow-workspace, startup: false, activationEvent: 'onStartupFinished'
+2026-02-28 15:26:31.319 [info] ExtensionService#_doActivateExtension vscode.debug-auto-launch, startup: false, activationEvent: 'onStartupFinished'
+2026-02-28 15:26:31.320 [info] ExtensionService#_doActivateExtension vscode.merge-conflict, startup: false, activationEvent: 'onStartupFinished'
+2026-02-28 15:26:31.371 [error] No bundle location found for extension anysphere.cursor-commits
+2026-02-28 15:26:31.371 [error] No bundle location found for extension anysphere.cursor-retrieval
+2026-02-28 15:26:31.371 [error] No bundle location found for extension anysphere.cursor-shadow-workspace
+2026-02-28 15:26:32.324 [info] Extension activated success: anysphere.cursor-shadow-workspace — 992ms (code loading: 992ms, activate call: 0ms, activate resolved: 0ms)
+2026-02-28 15:26:32.324 [info] Extension activated success: anysphere.cursor-retrieval — 864ms (code loading: 855ms, activate call: 4ms, activate resolved: 5ms)
+2026-02-28 15:26:32.324 [info] Extension activated success: anysphere.cursor-commits — 380ms (code loading: 369ms, activate call: 0ms, activate resolved: 11ms)
+2026-02-28 15:26:32.512 [info] Extension activated success: vscode.debug-auto-launch — 1133ms (code loading: 1127ms, activate call: 1ms, activate resolved: 5ms)
+2026-02-28 15:26:32.512 [info] Extension activated success: vscode.merge-conflict — 1169ms (code loading: 1158ms, activate call: 5ms, activate resolved: 6ms)
+2026-02-28 20:00:21.408 [info] Extension host terminating: renderer disconnected for too long (1)
+2026-02-28 20:00:21.699 [info] Lock '/root/.cursor-server/data/User/workspaceStorage/8b9cc59c8d950a0521d9805f5d307721/vscode.lock': Marking the lockfile as scheduled to be released in 6000 ms.
+2026-02-28 20:00:21.780 [info] Extension host with pid 1215774 exiting with code 0

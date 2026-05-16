@@ -1,0 +1,11 @@
+Listening on 127.0.0.1:37641
+[2026-05-16 06:29:41] info Disposed of connection to running server.
+[2026-05-16 06:29:41] info Checking /root/.cursor-server/cli/servers/Stable-f736016b0aa20ba1f99b7eec1dda48579fa4c290/log.txt and /root/.cursor-server/cli/servers/Stable-f736016b0aa20ba1f99b7eec1dda48579fa4c290/pid.txt for a running server...
+[2026-05-16 06:29:42] info Downloading Cursor server -> /tmp/.tmpcmHpQ6/vscode-reh-linux-x64.tar.gz
+[2026-05-16 06:29:59] info server entrypoint: cursor-server
+[2026-05-16 06:29:59] info Starting server...
+[2026-05-16 06:29:59] info Server started
+[2026-05-16 06:30:03] info Disposed of connection to running server.
+[2026-05-16 06:30:06] info Disposed of connection to running server.
+[2026-05-16 06:30:07] info Checking /root/.cursor-server/cli/servers/Stable-f736016b0aa20ba1f99b7eec1dda48579fa4c290/log.txt and /root/.cursor-server/cli/servers/Stable-f736016b0aa20ba1f99b7eec1dda48579fa4c290/pid.txt for a running server...
+[2026-05-16 06:30:07] info Found running server (pid=487418)

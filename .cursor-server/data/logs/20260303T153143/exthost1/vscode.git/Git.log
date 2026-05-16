@@ -1,0 +1,12 @@
+2026-03-03 15:31:49.426 [info] [main] 日志级别: Info
+2026-03-03 15:31:49.426 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-03-03 15:31:49.426 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-03-03 15:31:49.426 [info] [Model][doInitialScan] Initial repository scan started
+2026-03-03 15:31:49.426 [info] > git rev-parse --show-toplevel [4ms] (getRepositoryRoot)
+2026-03-03 15:31:49.426 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-03-03 15:31:49.426 [info] [Model][doInitialScan] Initial repository scan completed - repositories (0), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-03-03 15:31:59.383 [info] > git config --global user.name [1ms] 
+2026-03-03 15:31:59.390 [info] > git config --global user.email [1ms] 
+2026-03-03 15:31:59.390 [info] [main] Stored git author name in global state:  <>
+2026-03-03 15:34:13.653 [info] > git rev-parse --show-toplevel [12ms] (getRepositoryRoot)
+2026-03-03 15:34:13.653 [info] fatal: not a git repository (or any of the parent directories): .git

@@ -1,0 +1,47 @@
+2026-02-26 16:07:48.753 [info] [main] 日志级别: Info
+2026-02-26 16:07:48.753 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-02-26 16:07:48.753 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-02-26 16:07:48.753 [info] [Model][doInitialScan] Initial repository scan started
+2026-02-26 16:07:48.770 [info] > git rev-parse --show-toplevel [3ms] (getRepositoryRoot)
+2026-02-26 16:07:48.770 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:48.775 [info] [Model][doInitialScan] Initial repository scan completed - repositories (0), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-02-26 16:07:49.223 [info] > git config --get remote.origin.url [9ms] 
+2026-02-26 16:07:49.894 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [9ms] 
+2026-02-26 16:07:49.894 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.894 [info] > git config --get remote.origin.url [16ms] 
+2026-02-26 16:07:49.895 [info] > git log --skip=0 --max-count=1 --pretty=format:%H [23ms] 
+2026-02-26 16:07:49.896 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.896 [info] > git rev-parse --show-toplevel [31ms] 
+2026-02-26 16:07:49.896 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.896 [info] > git rev-parse --show-toplevel [38ms] 
+2026-02-26 16:07:49.896 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.897 [info] > git rev-parse --show-toplevel [46ms] 
+2026-02-26 16:07:49.897 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.898 [info] > git rev-parse --show-toplevel [53ms] 
+2026-02-26 16:07:49.898 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.925 [info] > git rev-parse --verify origin/main [18ms] 
+2026-02-26 16:07:49.925 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.937 [info] > git rev-parse --verify origin/master [5ms] 
+2026-02-26 16:07:49.937 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.947 [info] > git rev-parse --verify origin/develop [2ms] 
+2026-02-26 16:07:49.947 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.955 [info] > git branch -r [2ms] 
+2026-02-26 16:07:49.955 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:49.981 [info] > git config --get init.defaultBranch [20ms] 
+2026-02-26 16:07:50.035 [info] > git rev-parse --show-toplevel [22ms] (findGitRoot)
+2026-02-26 16:07:50.035 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:50.037 [info] > git rev-parse --show-toplevel [33ms] (findGitRoot)
+2026-02-26 16:07:50.037 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:50.817 [info] > git rev-parse --show-toplevel [640ms] (findGitRoot)
+2026-02-26 16:07:50.817 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:07:59.614 [info] > git config --global user.name [15ms] 
+2026-02-26 16:07:59.625 [info] > git config --global user.email [2ms] 
+2026-02-26 16:07:59.625 [info] [main] Stored git author name in global state:  <>
+2026-02-26 16:12:20.749 [info] > git rev-parse --show-toplevel [1ms] 
+2026-02-26 16:12:20.749 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:17:20.739 [info] > git rev-parse --show-toplevel [2ms] 
+2026-02-26 16:17:20.739 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:22:20.727 [info] > git rev-parse --show-toplevel [1ms] 
+2026-02-26 16:22:20.728 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-26 16:27:20.720 [info] > git rev-parse --show-toplevel [1ms] 
+2026-02-26 16:27:20.720 [info] fatal: not a git repository (or any of the parent directories): .git

@@ -1,0 +1,6 @@
+Listening on 127.0.0.1:44705
+[2026-02-26 16:07:44] info Disposed of connection to running server.
+[2026-02-26 16:07:44] info Checking /root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/log.txt and /root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/pid.txt for a running server...
+[2026-02-26 16:07:44] info Starting server...
+[2026-02-26 16:07:44] info Server started
+[2026-02-26 16:47:05] info Disposed of connection to running server.

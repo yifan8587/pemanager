@@ -1,0 +1,57 @@
+Server bound to /tmp/cursor-93ed606a-058c-4e31-9cdf-c72e79fc7757
+Extension host agent listening on /tmp/cursor-93ed606a-058c-4e31-9cdf-c72e79fc7757
+
+[16:07:45] 
+
+
+
+
+[16:07:45] Extension host agent started.
+[16:07:45] [<unknown>][3071b400][ExtensionHostConnection] New connection established.
+[16:07:45] [<unknown>][92639940][ManagementConnection] New connection established.
+Generating translation files failed. Error: ENOENT: no such file or directory, open '/root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/nls.keys.json'
+    at async open (node:internal/fs/promises:641:25)
+    at async Object.readFile (node:internal/fs/promises:1258:14)
+    at async Qy (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/server-main.js:3:16848)
+    at async dx (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/server-main.js:75:49720)
+    at async pd.start (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/server-main.js:75:53590) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/nls.keys.json'
+}
+[16:07:45] Getting extensions control
+[16:07:45] [CursorProclistService] Config enabled feature (subsample every 10s)
+[16:07:45] [<unknown>][3071b400][ExtensionHostConnection] <877212> Launched Extension Host Process.
+rejected promise not handled within 1 second: CodeExpectedError: Could not find pty 4 on pty host
+stack trace: CodeExpectedError: Could not find pty 4 on pty host
+    at M._throwIfNoPty (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:47:7334)
+    at M.resize (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:47:3319)
+    at O.r.<computed> (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:46:3386)
+    at Object.call (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:28:4951)
+    at gc.onPromise (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91894)
+    at gc.onRawMessage (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91309)
+    at mr.value (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:90592)
+    at b._deliver (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:2937)
+    at b.fire (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:3257)
+    at process.w (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:24:24784)
+    at process.emit (node:events:518:28)
+    at emit (node:internal/child_process:950:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+[16:07:47] Error [CodeExpectedError]: Could not find pty 4 on pty host
+    at M._throwIfNoPty (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:47:7334)
+    at M.resize (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:47:3319)
+    at O.r.<computed> (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:46:3386)
+    at Object.call (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:28:4951)
+    at gc.onPromise (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91894)
+    at gc.onRawMessage (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91309)
+    at mr.value (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:90592)
+    at b._deliver (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:2937)
+    at b.fire (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:26:3257)
+    at process.w (file:///root/.cursor-server/cli/servers/Stable-4f2b772756b8f609e1354b3063de282ccbe7a690/server/out/vs/platform/terminal/node/ptyHostMain.js:24:24784)
+    at process.emit (node:events:518:28)
+    at emit (node:internal/child_process:950:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+New EH opened, aborting shutdown
+[16:12:45] New EH opened, aborting shutdown
+[16:47:35] [<unknown>][92639940][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...

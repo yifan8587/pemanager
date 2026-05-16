@@ -1,0 +1,5 @@
+---
+pid: 487497
+cwd: /root
+---
+root@10ghk-web:~# 

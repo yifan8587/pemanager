@@ -1,0 +1,5 @@
+Listening on 127.0.0.1:42861
+[2026-03-04 07:34:20] info Disposed of connection to running server.
+[2026-03-04 07:34:20] info Checking /root/.cursor-server/cli/servers/Stable-8c95649f251a168cc4bb34c89531fae7db4bd990/log.txt and /root/.cursor-server/cli/servers/Stable-8c95649f251a168cc4bb34c89531fae7db4bd990/pid.txt for a running server...
+[2026-03-04 07:34:20] info Found running server (pid=1333801)
+[2026-03-04 08:16:19] info Disposed of connection to running server.

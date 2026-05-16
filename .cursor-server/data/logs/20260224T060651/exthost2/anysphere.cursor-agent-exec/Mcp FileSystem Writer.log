@@ -1,0 +1,17 @@
+2026-02-24 06:08:14.259 [info] Scheduling write operation
+2026-02-24 06:08:14.259 [info] Fetching MCP state from lease
+2026-02-24 06:08:14.300 [info] MCP lease changed, triggering onLeaseChanged
+2026-02-24 06:08:14.300 [info] MCP lease changed, triggering onLeaseChanged
+2026-02-24 06:08:14.463 [info] Scheduling write operation
+2026-02-24 06:08:14.463 [info] Waiting for previous write to complete
+2026-02-24 06:08:14.631 [info] Writing 0 MCP server(s) to disk {"serverCount":0,"servers":[]}
+2026-02-24 06:08:14.631 [info] Clearing mcps directory {"mcpsPath":"/root/.cursor/projects/www-wwwroot-whmcs/mcps"}
+2026-02-24 06:08:14.638 [info] MCP file system write complete: 0 server(s), 0 tool(s), 0 resource(s), 0 prompt(s) {"serverCount":0,"totalTools":0,"totalResources":0,"totalPrompts":0}
+2026-02-24 06:08:14.639 [info] Fetching MCP state from lease
+2026-02-24 06:08:14.796 [info] Writing 2 MCP server(s) to disk {"serverCount":2,"servers":["cursor-ide-browser","cursor-browser-extension"]}
+2026-02-24 06:08:14.797 [info] MCP server "cursor-ide-browser" (cursor-ide-browser): 0 tool(s), 0 resource(s), 0 prompt(s) {"serverName":"cursor-ide-browser","serverIdentifier":"cursor-ide-browser","toolCount":0,"resourceCount":0,"promptCount":0,"hasInstructions":true,"status":"connected"}
+2026-02-24 06:08:14.797 [info] MCP server "cursor-browser-extension" (cursor-browser-extension): 18 tool(s), 0 resource(s), 0 prompt(s) {"serverName":"cursor-browser-extension","serverIdentifier":"cursor-browser-extension","toolCount":18,"resourceCount":0,"promptCount":0,"hasInstructions":true,"status":"connected"}
+2026-02-24 06:08:14.797 [info] Clearing mcps directory {"mcpsPath":"/root/.cursor/projects/www-wwwroot-whmcs/mcps"}
+2026-02-24 06:08:14.800 [info] Server directory written successfully {"serverName":"cursor-ide-browser","folderPath":"/root/.cursor/projects/www-wwwroot-whmcs/mcps/cursor-ide-browser"}
+2026-02-24 06:08:14.810 [info] Server directory written successfully {"serverName":"cursor-browser-extension","folderPath":"/root/.cursor/projects/www-wwwroot-whmcs/mcps/cursor-browser-extension"}
+2026-02-24 06:08:14.810 [info] MCP file system write complete: 2 server(s), 18 tool(s), 0 resource(s), 0 prompt(s) {"serverCount":2,"totalTools":18,"totalResources":0,"totalPrompts":0}

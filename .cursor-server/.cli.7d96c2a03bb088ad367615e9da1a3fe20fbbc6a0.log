@@ -1,0 +1,6 @@
+Listening on 127.0.0.1:34541
+[2026-03-03 15:31:43] info Disposed of connection to running server.
+[2026-03-03 15:31:43] info Checking /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/log.txt and /root/.cursor-server/cli/servers/Stable-7d96c2a03bb088ad367615e9da1a3fe20fbbc6a0/pid.txt for a running server...
+[2026-03-03 15:31:43] info Starting server...
+[2026-03-03 15:31:43] info Server started
+[2026-03-03 16:22:56] info Disposed of connection to running server.

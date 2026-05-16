@@ -1,0 +1,23 @@
+2026-02-24 06:06:57.789 [info] [main] 日志级别: Info
+2026-02-24 06:06:57.789 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-02-24 06:06:57.823 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-02-24 06:06:57.823 [info] [Model][doInitialScan] Initial repository scan started
+2026-02-24 06:06:57.829 [info] [Model][doInitialScan] Initial repository scan completed - repositories (0), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-02-24 06:06:58.343 [info] > git config --get remote.origin.url [10ms] 
+2026-02-24 06:06:59.012 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [8ms] 
+2026-02-24 06:06:59.012 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-24 06:06:59.013 [info] > git config --get remote.origin.url [14ms] 
+2026-02-24 06:06:59.015 [info] > git log --skip=0 --max-count=1 --pretty=format:%H [21ms] 
+2026-02-24 06:06:59.015 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-24 06:06:59.035 [info] > git rev-parse --verify origin/main [14ms] 
+2026-02-24 06:06:59.035 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-24 06:06:59.044 [info] > git rev-parse --verify origin/master [2ms] 
+2026-02-24 06:06:59.044 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-24 06:06:59.052 [info] > git rev-parse --verify origin/develop [2ms] 
+2026-02-24 06:06:59.052 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-24 06:06:59.060 [info] > git branch -r [2ms] 
+2026-02-24 06:06:59.060 [info] fatal: not a git repository (or any of the parent directories): .git
+2026-02-24 06:06:59.067 [info] > git config --get init.defaultBranch [1ms] 
+2026-02-24 06:07:07.814 [info] > git config --global user.name [1ms] 
+2026-02-24 06:07:07.819 [info] > git config --global user.email [1ms] 
+2026-02-24 06:07:07.820 [info] [main] Stored git author name in global state:  <>

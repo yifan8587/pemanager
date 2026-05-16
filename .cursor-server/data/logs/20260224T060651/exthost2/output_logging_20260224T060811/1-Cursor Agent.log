@@ -1,0 +1,9 @@
+[AnthropicProxy] Client created with dynamic credentials (transport recreated when token, backend URL, or privacy mode changes)
+[AnthropicProxy] 
+🚀 Anthropic-compatible proxy server running at http://127.0.0.1:46551
+[AnthropicProxy]    POST /v1/messages - Anthropic Messages API
+
+[AnthropicProxy] Started on http://127.0.0.1:46551
+API proxy started on port 46551
+Loaded 0 bubble-to-session mappings from persisted state
+[ClaudeSDKClient] Initial permissions: approvalMode=unrestricted-shell
