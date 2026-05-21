@@ -1,0 +1,222 @@
+<script setup>
+import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Files } from '@element-plus/icons-vue'
+import { interfaceApi } from '../../api/interfaceApi'
+import JsonBlock from '../../components/JsonBlock.vue'
+import PageHeader from '../../components/PageHeader.vue'
+
+const loading = ref(false)
+const syncing = ref(false)
+const drift = ref(null)
+const ifRows = ref([])
+const runs = ref([])
+const files = ref([])
+
+const active = ref('interfaces')
+
+async function loadDrift() {
+  try {
+    const { data } = await interfaceApi.drift()
+    drift.value = data
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || 'drift 加载失败')
+  }
+}
+
+async function syncNow() {
+  syncing.value = true
+  try {
+    const { data } = await interfaceApi.syncFromSystem()
+    if (data?.success === false) {
+      ElMessage.error(data?.error_message || '同步失败')
+    } else {
+      ElMessage.success('同步已完成')
+    }
+    await Promise.all([loadDrift(), loadAll()])
+  } catch (e) {
+    const d = e?.response?.data
+    if (d?.success === false) {
+      ElMessage.error(d.error_message || '同步失败')
+    } else {
+      ElMessage.error(d ? JSON.stringify(d) : e.message || '同步失败')
+    }
+  } finally {
+    syncing.value = false
+  }
+}
+
+async function loadAll() {
+  loading.value = true
+  try {
+    const [i, r, f] = await Promise.all([
+      interfaceApi.listDbInterfaces(),
+      interfaceApi.listSyncRuns(),
+      interfaceApi.listNetplanFiles(),
+    ])
+    ifRows.value = i
+    runs.value = r
+    files.value = f
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const fileDrawer = ref(false)
+const fileDetail = ref(null)
+const fileLoading = ref(false)
+
+async function openFile(row) {
+  fileDrawer.value = true
+  fileDetail.value = null
+  fileLoading.value = true
+  try {
+    const { data } = await interfaceApi.getNetplanFile(row.id)
+    fileDetail.value = data
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    fileLoading.value = false
+  }
+}
+
+const ifDrawer = ref(false)
+const ifDetail = ref(null)
+const ifLoading = ref(false)
+
+async function openIf(row) {
+  ifDrawer.value = true
+  ifDetail.value = null
+  ifLoading.value = true
+  try {
+    const { data } = await interfaceApi.getDbInterface(row.ifname)
+    ifDetail.value = data
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    ifLoading.value = false
+  }
+}
+
+onMounted(async () => {
+  await loadDrift()
+  await loadAll()
+})
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader
+      title="配置镜像库"
+      description="DB 镜像与系统快照对齐；POST /db/sync/from-system/ 触发"
+      :icon="Files"
+    >
+      <template #actions>
+        <el-tag v-if="drift" :type="drift.in_sync ? 'success' : 'warning'" effect="dark" size="small">
+          {{ drift.in_sync ? '与现场一致' : '与现场存在差异' }}
+        </el-tag>
+        <el-button :loading="loading" @click="loadAll">刷新数据</el-button>
+        <el-button :loading="loading" @click="loadDrift">刷新比对</el-button>
+        <el-button type="primary" :loading="syncing" @click="syncNow">从系统同步入库</el-button>
+      </template>
+    </PageHeader>
+    <el-card v-if="drift && !drift.in_sync" shadow="never">
+      <el-collapse>
+        <el-collapse-item title="差异明细" name="1">
+          <JsonBlock :data="drift" :rows="10" />
+        </el-collapse-item>
+      </el-collapse>
+    </el-card>
+
+    <el-tabs v-model="active">
+      <el-tab-pane label="接口记录" name="interfaces">
+        <el-table :data="ifRows" border size="small" v-loading="loading">
+          <el-table-column prop="ifname" label="接口" width="160">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openIf(row)">{{ row.ifname }}</el-button>
+            </template>
+          </el-table-column>
+          <el-table-column prop="kind" label="类型" width="120" />
+          <el-table-column prop="operstate" label="运行" width="100" />
+          <el-table-column prop="content_sha256" label="校验" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="last_seen_at" label="最近同步" width="190" />
+        </el-table>
+      </el-tab-pane>
+      <el-tab-pane label="同步任务" name="runs">
+        <el-table :data="runs" border size="small" v-loading="loading">
+          <el-table-column prop="started_at" label="开始" width="190" />
+          <el-table-column prop="finished_at" label="结束" width="190" />
+          <el-table-column prop="success" label="成功" width="90">
+            <template #default="{ row }">
+              <el-tag :type="row.success ? 'success' : 'danger'" size="small">
+                {{ row.success ? '是' : '否' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="stats" label="统计" min-width="200">
+            <template #default="{ row }">
+              <span class="mono">{{ JSON.stringify(row.stats || {}) }}</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="error_message" label="错误" show-overflow-tooltip />
+        </el-table>
+      </el-tab-pane>
+      <el-tab-pane label="Netplan 文件" name="files">
+        <el-table :data="files" border size="small" v-loading="loading">
+          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column prop="path" label="路径" min-width="220" show-overflow-tooltip />
+          <el-table-column prop="file_sha256" label="sha256" min-width="200" show-overflow-tooltip />
+          <el-table-column prop="size_bytes" label="大小" width="100" />
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openFile(row)">详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-drawer v-model="fileDrawer" title="Netplan 文件详情" size="55%">
+      <div v-loading="fileLoading">
+        <JsonBlock v-if="fileDetail" :data="fileDetail" :rows="26" />
+      </div>
+    </el-drawer>
+
+    <el-drawer v-model="ifDrawer" title="接口镜像详情" size="55%">
+      <div v-loading="ifLoading">
+        <JsonBlock v-if="ifDetail" :data="ifDetail" :rows="26" />
+      </div>
+    </el-drawer>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.actions {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.sub {
+  margin-left: 8px;
+  color: var(--el-text-color-secondary);
+}
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 12px;
+}
+</style>

@@ -1,0 +1,44 @@
+2026-05-19 02:50:04.885 [info] [main] 日志级别: Info
+2026-05-19 02:50:04.886 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-19 02:50:04.920 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-19 02:50:04.920 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-19 02:50:05.040 [info] > git rev-parse --show-toplevel [17ms] (getRepositoryRoot)
+2026-05-19 02:50:05.066 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [15ms] 
+2026-05-19 02:50:05.089 [info] [Model][openRepository] Opened repository: /root
+2026-05-19 02:50:05.089 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-19 02:50:06.153 [info] > git rev-parse --show-toplevel [1043ms] (getRepositoryRoot)
+2026-05-19 02:50:06.154 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-19 02:50:06.155 [info] > git config --get commit.template [1051ms] 
+2026-05-19 02:50:06.242 [info] > git check-ignore -v -z --stdin [130ms]
+2026-05-19 02:50:06.243 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [37ms] 
+2026-05-19 02:50:06.357 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [44ms] 
+2026-05-19 02:50:06.391 [info] > git show --textconv :pemanager/frontend/vite.config.js [62ms]
+2026-05-19 02:50:06.392 [info] > git ls-files --stage -- pemanager/frontend/vite.config.js [43ms] 
+2026-05-19 02:50:06.414 [info] > git cat-file -s 445e3df75dc0ccec46344bf6e1e68d54a4fdf2b1 [15ms] 
+2026-05-19 02:50:06.723 [info] > git check-ignore -v -z --stdin [88ms]
+2026-05-19 02:50:07.106 [info] > git status -z -uall [805ms] (cancelled)
+2026-05-19 02:50:10.978 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3876ms] 
+2026-05-19 02:50:11.028 [info] > git config --get --local branch.main.vscode-merge-base [39ms] 
+2026-05-19 02:50:11.028 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-19 02:50:11.044 [info] > git config --get commit.template [257ms] 
+2026-05-19 02:50:11.048 [info] > git reflog main --grep-reflog=branch: Created from *. [11ms] 
+2026-05-19 02:50:11.070 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [14ms] 
+2026-05-19 02:50:11.070 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-19 02:50:11.070 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-19 02:50:11.083 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [17ms] 
+2026-05-19 02:50:11.085 [info] > git merge-base refs/heads/main refs/remotes/origin/main [5ms] 
+2026-05-19 02:50:11.096 [info] > git diff --name-status -z --diff-filter=ADMR c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532...refs/remotes/origin/main [2ms] 
+2026-05-19 02:50:11.117 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [3ms] 
+2026-05-19 02:50:14.291 [info] > git status -z -uall [3185ms] (cancelled)
+2026-05-19 02:50:14.909 [info] > git config --global user.name [1ms] 
+2026-05-19 02:50:14.916 [info] > git config --global user.email [1ms] 
+2026-05-19 02:50:14.916 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-19 02:50:16.762 [info] > git check-ignore -v -z --stdin [24ms]
+2026-05-19 02:51:24.707 [info] > git check-ignore -v -z --stdin [42ms]
+2026-05-19 02:56:18.282 [info] > git blame --root --incremental c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532 -- pemanager/frontend/vite.config.js [3ms] 
+2026-05-19 02:56:18.523 [info] > git show --textconv :pemanager/backend/qosmanage/urls.py [47ms]
+2026-05-19 02:56:18.523 [info] > git ls-files --stage -- pemanager/backend/qosmanage/urls.py [40ms] 
+2026-05-19 02:56:18.535 [info] > git cat-file -s 441016214b5ff328d2ce7d7eec04fee3c909a0dd [4ms] 
+2026-05-19 02:56:19.098 [info] > git check-ignore -v -z --stdin [55ms]
+2026-05-19 03:03:37.006 [info] > git blame --root --incremental c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532 -- pemanager/backend/qosmanage/urls.py [3ms] 
+2026-05-19 03:04:10.544 [info] > git check-ignore -v -z --stdin [34ms]

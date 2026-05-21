@@ -1,0 +1,29 @@
+2026-05-19 08:21:26.727 [info] Creating Indexing Repo client:  https://repo42.cursor.sh
+2026-05-19 08:21:26.727 [info] Creating repo client with backend url: https://repo42.cursor.sh
+2026-05-19 08:21:26.729 [info] Using existing keys for an index
+2026-05-19 08:21:26.729 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-19 08:21:26.800 [info] Using existing keys for an index
+2026-05-19 08:21:26.800 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-19 08:21:26.800 [info] Using existing keys for an index
+2026-05-19 08:21:26.800 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-19 08:21:26.888 [warning] Failed to get symbolic ref: Failed to execute git
+2026-05-19 08:21:27.084 [info] Picked default branch from method 1.
+2026-05-19 08:21:27.278 [info] Starting RepoIndexWatcher for repo: f10cb3fc-41f4-4c90-ac17-271b8320c80b, owner: google-oauth2|user_01JH21R6SFYWQ1EJ84SGZ44AWM
+2026-05-19 08:21:27.278 [error] We currently do not allow indexing the home directory.
+2026-05-19 08:21:27.278 [info] Indexing job successfully done or aborted.
+2026-05-19 08:29:02.278 [info] multiCodebaseIndexingJob dispose
+2026-05-19 08:29:02.278 [info] Aborting indexing job.
+2026-05-19 08:29:02.278 [error] We currently do not allow indexing the home directory.
+2026-05-19 08:29:02.278 [info] Indexing job successfully done or aborted.
+2026-05-19 08:36:37.278 [info] multiCodebaseIndexingJob dispose
+2026-05-19 08:36:37.278 [info] Aborting indexing job.
+2026-05-19 08:36:37.278 [error] We currently do not allow indexing the home directory.
+2026-05-19 08:36:37.278 [info] Indexing job successfully done or aborted.
+2026-05-19 08:44:12.278 [info] multiCodebaseIndexingJob dispose
+2026-05-19 08:44:12.278 [info] Aborting indexing job.
+2026-05-19 08:44:12.278 [error] We currently do not allow indexing the home directory.
+2026-05-19 08:44:12.278 [info] Indexing job successfully done or aborted.
+2026-05-19 08:51:47.277 [info] multiCodebaseIndexingJob dispose
+2026-05-19 08:51:47.277 [info] Aborting indexing job.
+2026-05-19 08:51:47.277 [error] We currently do not allow indexing the home directory.
+2026-05-19 08:51:47.277 [info] Indexing job successfully done or aborted.

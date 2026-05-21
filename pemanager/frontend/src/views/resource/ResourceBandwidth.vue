@@ -1,0 +1,289 @@
+<script setup>
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { DataAnalysis } from '@element-plus/icons-vue'
+import { resourceApi } from '../../api/resourceApi'
+import PageHeader from '../../components/PageHeader.vue'
+
+const loading = ref(false)
+const pools = ref([])
+const allocations = ref([])
+const customers = ref([])
+
+const poolDlg = ref(false)
+const poolForm = reactive({ id: null, name: '', total_mbps: 1000, remark: '' })
+const poolRules = {
+  name: [{ required: true, message: '必填', trigger: 'blur' }],
+  total_mbps: [{ required: true, message: '必填', trigger: 'blur' }],
+}
+const poolRef = ref()
+const savingPool = ref(false)
+
+const upsertDlg = ref(false)
+const upsertForm = reactive({
+  pool_name: '',
+  interface_code: '',
+  allocated_mbps: 100,
+  customer_code: '',
+  remark: '',
+})
+const upsertRef = ref()
+const upsertRules = {
+  pool_name: [{ required: true, message: '必填', trigger: 'blur' }],
+  interface_code: [{ required: true, message: '必填', trigger: 'blur' }],
+  allocated_mbps: [{ required: true, message: '必填', trigger: 'blur' }],
+}
+const savingUpsert = ref(false)
+
+async function load() {
+  loading.value = true
+  try {
+    const [p, a, c] = await Promise.all([
+      resourceApi.listPools(),
+      resourceApi.listAllocations(),
+      resourceApi.listCustomers(),
+    ])
+    pools.value = p
+    allocations.value = a
+    customers.value = c
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openPool(row) {
+  if (row) {
+    poolForm.id = row.id
+    poolForm.name = row.name
+    poolForm.total_mbps = row.total_mbps
+    poolForm.remark = row.remark || ''
+  } else {
+    poolForm.id = null
+    poolForm.name = ''
+    poolForm.total_mbps = 1000
+    poolForm.remark = ''
+  }
+  poolDlg.value = true
+}
+
+async function savePool() {
+  await poolRef.value?.validate().catch(() => null)
+  savingPool.value = true
+  try {
+    if (poolForm.id) {
+      await resourceApi.patchPool(poolForm.id, {
+        name: poolForm.name,
+        total_mbps: poolForm.total_mbps,
+        remark: poolForm.remark,
+      })
+    } else {
+      await resourceApi.createPool({
+        name: poolForm.name,
+        total_mbps: poolForm.total_mbps,
+        remark: poolForm.remark,
+      })
+    }
+    ElMessage.success('已保存')
+    poolDlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '保存失败')
+  } finally {
+    savingPool.value = false
+  }
+}
+
+async function deletePool(row) {
+  try {
+    await ElMessageBox.confirm(`删除带宽池 ${row.name}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await resourceApi.deletePool(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '删除失败')
+  }
+}
+
+function openUpsert(row) {
+  upsertForm.pool_name = row ? pools.value.find((p) => p.id === row.pool)?.name || '' : ''
+  upsertForm.interface_code = row?.interface_code || ''
+  upsertForm.allocated_mbps = row?.allocated_mbps || 100
+  upsertForm.customer_code = row?.customer_code || ''
+  upsertForm.remark = row?.remark || ''
+  upsertDlg.value = true
+}
+
+async function saveUpsert() {
+  await upsertRef.value?.validate().catch(() => null)
+  savingUpsert.value = true
+  try {
+    await resourceApi.upsertAllocation({
+      pool_name: upsertForm.pool_name,
+      interface_code: upsertForm.interface_code,
+      allocated_mbps: upsertForm.allocated_mbps,
+      customer_code: upsertForm.customer_code || undefined,
+      remark: upsertForm.remark,
+    })
+    ElMessage.success('已保存分配')
+    upsertDlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '保存失败')
+  } finally {
+    savingUpsert.value = false
+  }
+}
+
+async function deleteAlloc(row) {
+  const poolName = pools.value.find((p) => p.id === row.pool)?.name
+  if (!poolName) {
+    ElMessage.error('找不到池名称')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `删除分配 ${poolName} / ${row.interface_code}？`,
+      '确认',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await resourceApi.deleteAllocationByKey({
+      pool_name: poolName,
+      interface_code: row.interface_code,
+    })
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '删除失败')
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader title="带宽" description="带宽池与按接口的分配；写满时拒绝创建" :icon="DataAnalysis">
+      <template #actions>
+        <el-button type="primary" @click="openPool(null)">新建池</el-button>
+        <el-button @click="openUpsert(null)">新建分配</el-button>
+        <el-button :loading="loading" @click="load">刷新</el-button>
+      </template>
+    </PageHeader>
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-head">
+          <span>带宽池</span>
+        </div>
+      </template>
+      <el-table :data="pools" border size="small" v-loading="loading">
+        <el-table-column prop="name" label="名称" />
+        <el-table-column prop="total_mbps" label="总量" width="100" />
+        <el-table-column prop="allocated_mbps" label="已用" width="100" />
+        <el-table-column prop="remaining_mbps" label="剩余" width="100" />
+        <el-table-column prop="remark" label="备注" />
+        <el-table-column label="操作" width="160" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openPool(row)">编辑</el-button>
+            <el-button link type="danger" @click="deletePool(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header>
+        <div class="card-head">
+          <span>带宽分配</span>
+        </div>
+      </template>
+      <el-table :data="allocations" border size="small" v-loading="loading">
+        <el-table-column label="池" width="140">
+          <template #default="{ row }">
+            {{ pools.find((p) => p.id === row.pool)?.name || row.pool }}
+          </template>
+        </el-table-column>
+        <el-table-column prop="interface_code" label="接口" />
+        <el-table-column prop="allocated_mbps" label="Mbps" width="100" />
+        <el-table-column prop="customer_code" label="客户" width="120" />
+        <el-table-column prop="remark" label="备注" />
+        <el-table-column label="操作" width="140" fixed="right">
+          <template #default="{ row }">
+            <el-button link type="primary" @click="openUpsert(row)">编辑</el-button>
+            <el-button link type="danger" @click="deleteAlloc(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-dialog v-model="poolDlg" :title="poolForm.id ? '编辑带宽池' : '新建带宽池'" width="480px">
+      <el-form ref="poolRef" :model="poolForm" :rules="poolRules" label-width="100px">
+        <el-form-item label="名称" prop="name">
+          <el-input v-model="poolForm.name" :disabled="Boolean(poolForm.id)" />
+        </el-form-item>
+        <el-form-item label="总带宽" prop="total_mbps">
+          <el-input-number v-model="poolForm.total_mbps" :min="1" :max="10000000" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="poolForm.remark" type="textarea" rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="poolDlg = false">取消</el-button>
+        <el-button type="primary" :loading="savingPool" @click="savePool">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="upsertDlg" title="带宽分配（按池名+接口 upsert）" width="520px">
+      <el-form ref="upsertRef" :model="upsertForm" :rules="upsertRules" label-width="108px">
+        <el-form-item label="池名称" prop="pool_name">
+          <el-select v-model="upsertForm.pool_name" filterable placeholder="选择或输入" allow-create>
+            <el-option v-for="p in pools" :key="p.id" :label="p.name" :value="p.name" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="接口标识" prop="interface_code">
+          <el-input v-model="upsertForm.interface_code" />
+        </el-form-item>
+        <el-form-item label="分配 Mbps" prop="allocated_mbps">
+          <el-input-number v-model="upsertForm.allocated_mbps" :min="1" :max="10000000" />
+        </el-form-item>
+        <el-form-item label="客户">
+          <el-select v-model="upsertForm.customer_code" clearable filterable placeholder="可选">
+            <el-option v-for="c in customers" :key="c.id" :label="c.code" :value="c.code" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="upsertForm.remark" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="upsertDlg = false">取消</el-button>
+        <el-button type="primary" :loading="savingUpsert" @click="saveUpsert">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+</style>

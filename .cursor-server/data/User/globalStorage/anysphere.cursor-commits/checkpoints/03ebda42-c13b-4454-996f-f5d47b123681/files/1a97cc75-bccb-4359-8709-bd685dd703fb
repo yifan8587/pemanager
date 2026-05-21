@@ -1,0 +1,21 @@
+from django.urls import path
+
+from interfacemanage import views
+
+urlpatterns = [
+    path('health/', views.health, name='interfacemanage-health'),
+    path('sources/netplan/', views.NetplanConfigView.as_view(), name='interfacemanage-netplan'),
+    path('sources/kernel/', views.KernelStateView.as_view(), name='interfacemanage-kernel'),
+    path('sources/wireguard/', views.WireGuardStateView.as_view(), name='interfacemanage-wireguard'),
+    path('interfaces/', views.InterfaceInventoryView.as_view(), name='interfacemanage-interfaces'),
+    path(
+        'interfaces/export/',
+        views.InterfaceExportView.as_view(),
+        name='interfacemanage-interfaces-export',
+    ),
+    path(
+        'interfaces/<str:ifname>/',
+        views.InterfaceDetailView.as_view(),
+        name='interfacemanage-interface-detail',
+    ),
+]

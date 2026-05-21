@@ -1,8 +1,217 @@
-from rest_framework.decorators import api_view
+from __future__ import annotations
+
+import yaml
+from django.http import HttpResponse
+from rest_framework import status, viewsets
+from rest_framework.decorators import action, api_view
 from rest_framework.response import Response
+from rest_framework.views import APIView
 
-APP_NAME = "interfacemanage"
+from interfacemanage.models import DesiredTunnelConfig, NetplanFileRecord, NetworkInterfaceRecord, NetworkSyncRun
+from interfacemanage.serializers import (
+    DesiredTunnelConfigSerializer,
+    NetplanFileRecordBriefSerializer,
+    NetplanFileRecordSerializer,
+    NetworkInterfaceRecordSerializer,
+    NetworkSyncRunSerializer,
+)
+from interfacemanage.services import db_sync, iproute, netplan, unify, wireguard
+from interfacemanage.services import netplan_writing
 
-@api_view(["GET"])
+APP_NAME = 'interfacemanage'
+
+
+@api_view(['GET'])
 def health(_request):
-    return Response({"app": APP_NAME, "status": "ok"})
+    return Response({'app': APP_NAME, 'status': 'ok'})
+
+
+class NetplanConfigView(APIView):
+    """
+    GET: 读取 /etc/netplan 下 YAML。
+    ?format=yaml 返回合并后的 network 片段（纯文本 YAML）；
+    默认 JSON（结构化 + 每文件原文解析）。
+    """
+
+    def get(self, request):
+        bundle = netplan.load_netplan()
+        fmt = (request.query_params.get('format') or 'json').lower()
+        if fmt == 'yaml':
+            merged = bundle.get('merged_network') or {}
+            body = yaml.safe_dump(
+                {'network': merged},
+                allow_unicode=True,
+                default_flow_style=False,
+                sort_keys=False,
+            )
+            return HttpResponse(body, content_type='text/yaml; charset=utf-8')
+        return Response(bundle)
+
+
+class KernelStateView(APIView):
+    """GET: 通过 ip -json（及 ip tunnel show）采集内核与隧道信息。"""
+
+    def get(self, request):
+        depth = (request.query_params.get('depth') or 'full').lower()
+        snap = iproute.collect_kernel_snapshot()
+        if depth == 'minimal':
+            return Response(
+                {
+                    'link': snap.get('link'),
+                    'address': snap.get('address'),
+                    'tunnel_show': {
+                        'ok': (snap.get('tunnel_show') or {}).get('ok'),
+                        'parsed': (snap.get('tunnel_show') or {}).get('parsed'),
+                    },
+                }
+            )
+        return Response(snap)
+
+
+class WireGuardStateView(APIView):
+    """
+    GET: `wg show` 聚合。
+    ?reveal_secrets=1 显示私钥与 PSK（慎用，仅限受信环境）。
+    """
+
+    def get(self, request):
+        masked = request.query_params.get('reveal_secrets') != '1'
+        data = wireguard.collect_wireguard_overview(mask=masked)
+        return Response(data)
+
+
+class InterfaceInventoryView(APIView):
+    """
+    GET: 专业接口清单 —— 合并 netplan 意图 + 内核实际 + WireGuard 详情。
+    查询参数:
+    - kind: 按内核/隧道类型过滤，如 gre / vxlan / wireguard / ethernet
+    - q: 对接口名模糊匹配
+    - admin_up: true/false 按管理状态过滤
+    """
+
+    def get(self, request):
+        np = netplan.load_netplan()
+        kernel = iproute.collect_kernel_snapshot()
+        masked = request.query_params.get('reveal_secrets') != '1'
+        wg = wireguard.collect_wireguard_overview(mask=masked)
+        rows = unify.unify_interfaces(netplan_bundle=np, kernel=kernel, wireguard=wg)
+        stats = unify.summarize_by_kind(rows)
+
+        kind = request.query_params.get('kind')
+        if kind:
+            kind_l = kind.lower()
+            rows = [r for r in rows if str(r.get('kind', '')).lower() == kind_l]
+
+        q = request.query_params.get('q')
+        if q:
+            q_l = q.lower()
+            rows = [r for r in rows if q_l in r['ifname'].lower()]
+
+        au = request.query_params.get('admin_up')
+        if au is not None:
+            want = au.lower() in ('1', 'true', 'yes')
+            rows = [r for r in rows if r.get('admin_up') is want]
+
+        return Response(
+            {
+                'summary': stats,
+                'count': len(rows),
+                'interfaces': rows,
+                'sources': {
+                    'netplan_errors': np.get('errors'),
+                    'kernel_link_ok': (kernel.get('link') or {}).get('ok'),
+                    'wireguard_ok': wg.get('ok'),
+                },
+            }
+        )
+
+
+class InterfaceDetailView(APIView):
+    """GET: 单个接口的合并视图。"""
+
+    def get(self, request, ifname: str):
+        np = netplan.load_netplan()
+        kernel = iproute.collect_kernel_snapshot()
+        masked = request.query_params.get('reveal_secrets') != '1'
+        wg = wireguard.collect_wireguard_overview(mask=masked)
+        rows = unify.unify_interfaces(netplan_bundle=np, kernel=kernel, wireguard=wg)
+        for row in rows:
+            if row['ifname'] == ifname:
+                return Response(row)
+        return Response({'detail': f'接口 {ifname} 不存在或未出现在 ip link 中'}, status=status.HTTP_404_NOT_FOUND)
+
+
+class InterfaceExportView(APIView):
+    """
+    GET: 将当前合并接口表导出为 YAML 或 JSON，便于纳管与备份。
+    format=json|yaml
+    """
+
+    def get(self, request):
+        np = netplan.load_netplan()
+        kernel = iproute.collect_kernel_snapshot()
+        masked = request.query_params.get('reveal_secrets') != '1'
+        wg = wireguard.collect_wireguard_overview(mask=masked)
+        rows = unify.unify_interfaces(netplan_bundle=np, kernel=kernel, wireguard=wg)
+        body = {
+            'inventory_version': 1,
+            'interfaces': rows,
+            'netplan_summary': np.get('summary'),
+        }
+        fmt = (request.query_params.get('format') or 'json').lower()
+        if fmt == 'yaml':
+            y = yaml.safe_dump(body, allow_unicode=True, default_flow_style=False, sort_keys=False)
+            return HttpResponse(y, content_type='text/yaml; charset=utf-8')
+        return Response(body)
+
+
+class NetworkSyncRunViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = NetworkSyncRun.objects.all()
+    serializer_class = NetworkSyncRunSerializer
+
+
+class NetplanFileRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = NetplanFileRecord.objects.all().order_by('path')
+    serializer_class = NetplanFileRecordSerializer
+
+    def get_serializer_class(self):
+        if self.action == 'list':
+            return NetplanFileRecordBriefSerializer
+        return super().get_serializer_class()
+
+
+class NetworkInterfaceRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    queryset = NetworkInterfaceRecord.objects.all().order_by('ifindex', 'ifname')
+    serializer_class = NetworkInterfaceRecordSerializer
+    lookup_field = 'ifname'
+
+
+class DesiredTunnelConfigViewSet(viewsets.ModelViewSet):
+    """GRE / VXLAN / WireGuard 意图配置：由前端录入并持久化，供后续下发 netplan 或运维使用。"""
+
+    queryset = DesiredTunnelConfig.objects.all().order_by('kind', 'ifname')
+    serializer_class = DesiredTunnelConfigSerializer
+
+    @action(detail=False, methods=['post'], url_path='apply-system')
+    def apply_system(self, request):
+        """根据当前库中全部意图生成 netplan 片段，netplan generate + netplan try。"""
+        result = netplan_writing.apply_desired_tunnels_netplan()
+        code = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=code)
+
+
+class SyncFromSystemView(APIView):
+    """POST: 将系统当前 netplan + ip + wg 对齐写入数据库。"""
+
+    def post(self, request):
+        run = db_sync.sync_network_state_from_system()
+        ser = NetworkSyncRunSerializer(run)
+        code = status.HTTP_200_OK if run.success else status.HTTP_500_INTERNAL_SERVER_ERROR
+        return Response(ser.data, status=code)
+
+
+class NetworkDriftView(APIView):
+    """GET: 对比「现场 unify」与数据库中的 content_sha256（不落库）。"""
+
+    def get(self, request):
+        return Response(db_sync.compute_live_drifts())

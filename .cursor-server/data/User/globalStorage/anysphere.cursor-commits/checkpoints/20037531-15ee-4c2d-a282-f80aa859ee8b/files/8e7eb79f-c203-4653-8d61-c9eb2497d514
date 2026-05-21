@@ -1,0 +1,76 @@
+<script setup>
+const sections = [
+  {
+    title: '资源管理',
+    links: [
+      { to: '/resourcemanage/summary', label: '概览' },
+      { to: '/resourcemanage/customers', label: '客户' },
+      { to: '/resourcemanage/ip-addresses', label: 'IP 地址' },
+      { to: '/resourcemanage/bandwidth', label: '带宽' },
+      { to: '/resourcemanage/allocation-logs', label: '分配日志' },
+      { to: '/resourcemanage/inbound-sync', label: '资源回写' },
+    ],
+  },
+  {
+    title: '接口管理',
+    links: [
+      { to: '/interfacemanage/live', label: '实时接口' },
+      { to: '/interfacemanage/db-mirror', label: '配置镜像库' },
+      { to: '/interfacemanage/sources', label: '原始采集' },
+      { to: '/interfacemanage/tunnel-config', label: '隧道接口配置' },
+    ],
+  },
+  {
+    title: '其他模块',
+    links: [
+      { to: '/routemanage', label: '路由管理' },
+      { to: '/qosmanage', label: 'QoS 管理' },
+      { to: '/firewallmanage', label: '防火墙管理' },
+      { to: '/operationmanage', label: '运维管理' },
+      { to: '/logmanage', label: '日志管理' },
+    ],
+  },
+]
+</script>
+
+<template>
+  <div class="home">
+    <el-text size="large" tag="div" class="title">PE Manager — 模块导航</el-text>
+    <el-row :gutter="16">
+      <el-col v-for="sec in sections" :key="sec.title" :xs="24" :md="8">
+        <el-card shadow="never" class="card">
+          <template #header>{{ sec.title }}</template>
+          <div class="links">
+            <router-link v-for="l in sec.links" :key="l.to" :to="l.to" class="link">{{ l.label }}</router-link>
+          </div>
+        </el-card>
+      </el-col>
+    </el-row>
+  </div>
+</template>
+
+<style scoped>
+.home {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.title {
+  font-weight: 600;
+}
+.card {
+  min-height: 180px;
+}
+.links {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.link {
+  color: var(--el-color-primary);
+  text-decoration: none;
+}
+.link:hover {
+  text-decoration: underline;
+}
+</style>

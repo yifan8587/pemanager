@@ -1,0 +1,152 @@
+<script setup>
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { User } from '@element-plus/icons-vue'
+import { resourceApi } from '../../api/resourceApi'
+import PageHeader from '../../components/PageHeader.vue'
+
+const loading = ref(false)
+const rows = ref([])
+const dialog = ref(false)
+const saving = ref(false)
+const form = reactive({ id: null, code: '', name: '', remark: '', is_active: true })
+const rules = {
+  code: [{ required: true, message: '必填', trigger: 'blur' }],
+  name: [{ required: true, message: '必填', trigger: 'blur' }],
+}
+const formRef = ref()
+
+async function load() {
+  loading.value = true
+  try {
+    rows.value = await resourceApi.listCustomers()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openCreate() {
+  form.id = null
+  form.code = ''
+  form.name = ''
+  form.remark = ''
+  form.is_active = true
+  dialog.value = true
+}
+
+function openEdit(row) {
+  form.id = row.id
+  form.code = row.code
+  form.name = row.name
+  form.remark = row.remark || ''
+  form.is_active = row.is_active
+  dialog.value = true
+}
+
+async function save() {
+  await formRef.value?.validate().catch(() => null)
+  saving.value = true
+  try {
+    if (form.id) {
+      await resourceApi.patchCustomer(form.id, {
+        name: form.name,
+        remark: form.remark,
+        is_active: form.is_active,
+      })
+      ElMessage.success('已更新')
+    } else {
+      await resourceApi.createCustomer({
+        code: form.code,
+        name: form.name,
+        remark: form.remark,
+        is_active: form.is_active,
+      })
+      ElMessage.success('已创建')
+    }
+    dialog.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  try {
+    await ElMessageBox.confirm(`删除客户 ${row.code}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await resourceApi.deleteCustomer(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '删除失败')
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader title="客户" description="资源分配对象（IP / 带宽 的归属）" :icon="User">
+      <template #actions>
+        <el-button type="primary" @click="openCreate">新建客户</el-button>
+        <el-button :loading="loading" @click="load">刷新</el-button>
+      </template>
+    </PageHeader>
+    <el-table :data="rows" border v-loading="loading" size="small">
+      <el-table-column prop="code" label="编码" width="140" />
+      <el-table-column prop="name" label="名称" />
+      <el-table-column prop="remark" label="备注" />
+      <el-table-column prop="is_active" label="启用" width="90">
+        <template #default="{ row }">
+          <el-tag :type="row.is_active ? 'success' : 'info'" size="small">
+            {{ row.is_active ? '是' : '否' }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="160" fixed="right">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button link type="danger" @click="remove(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-dialog v-model="dialog" :title="form.id ? '编辑客户' : '新建客户'" width="520px">
+      <el-form ref="formRef" :model="form" :rules="rules" label-width="88px">
+        <el-form-item label="编码" prop="code">
+          <el-input v-model="form.code" :disabled="Boolean(form.id)" />
+        </el-form-item>
+        <el-form-item label="名称" prop="name">
+          <el-input v-model="form.name" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" type="textarea" rows="2" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="form.is_active" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialog = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+</style>

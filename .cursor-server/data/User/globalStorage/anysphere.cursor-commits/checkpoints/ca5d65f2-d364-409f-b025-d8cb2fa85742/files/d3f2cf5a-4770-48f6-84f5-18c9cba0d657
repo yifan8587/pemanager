@@ -1,0 +1,51 @@
+from rest_framework import serializers
+
+from resourcemanage.models import IPAddressEntry
+from routemanage.models import DesiredRouteConfig
+
+
+class DesiredRouteConfigSerializer(serializers.ModelSerializer):
+    ip_address = serializers.IPAddressField(source='ip_allocation.address', read_only=True)
+
+    class Meta:
+        model = DesiredRouteConfig
+        fields = [
+            'id',
+            'interface_name',
+            'netplan_device_class',
+            'dest_cidr',
+            'gateway',
+            'on_link',
+            'metric',
+            'route_table',
+            'ip_allocation',
+            'ip_address',
+            'remark',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = ['id', 'created_at', 'updated_at']
+
+    def create(self, validated_data):
+        obj = DesiredRouteConfig(**validated_data)
+        obj.full_clean()
+        obj.save()
+        return obj
+
+    def update(self, instance, validated_data):
+        for key, val in validated_data.items():
+            setattr(instance, key, val)
+        instance.full_clean()
+        instance.save()
+        return instance
+
+
+class IPAddressEntryBriefSerializer(serializers.ModelSerializer):
+    """供路由表单选择已分配/预留 IP。"""
+
+    customer_code = serializers.CharField(source='customer.code', read_only=True)
+
+    class Meta:
+        model = IPAddressEntry
+        fields = ['id', 'address', 'state', 'interface_code', 'subnet_label', 'customer_code']
+        read_only_fields = ['id', 'address', 'state', 'interface_code', 'subnet_label', 'customer_code']

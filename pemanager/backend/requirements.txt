@@ -1,3 +1,5 @@
 django>=5.0,<6
 djangorestframework>=3.14
 django-cors-headers>=4.0
+PyYAML>=6.0
+python-wireguard>=0.2.2

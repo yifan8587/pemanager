@@ -1,0 +1,471 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { interfaceApi } from '../../api/interfaceApi'
+import JsonBlock from '../../components/JsonBlock.vue'
+
+const loading = ref(false)
+const rows = ref([])
+const dlg = ref(false)
+const saving = ref(false)
+const editingId = ref(null)
+
+const kind = ref('gre')
+
+const gre = reactive({
+  ifname: '',
+  local: '',
+  remote: '',
+  address_cidr: '',
+  ttl: 64,
+  key: '',
+})
+
+const vxlan = reactive({
+  ifname: '',
+  vni: 100,
+  local: '',
+  remote: '',
+  address_cidr: '',
+  port: 8472,
+  ttl: 255,
+})
+
+const wg = reactive({
+  ifname: '',
+  addresses: '',
+  listen_port: 51820,
+  private_key: '',
+  peer_public_key: '',
+  peer_endpoint: '',
+  peer_allowed_ips: '0.0.0.0/0',
+  persistent_keepalive: 25,
+})
+
+const remark = ref('')
+
+const title = computed(() => (editingId.value ? '编辑意图配置' : '新增隧道接口（同步到后端）'))
+
+function isCidr(s) {
+  const t = String(s || '').trim()
+  return /^\S+\/\d{1,3}$/.test(t)
+}
+
+function buildSpec() {
+  if (kind.value === 'gre') {
+    const addresses = []
+    const c = String(gre.address_cidr || '').trim()
+    if (c) addresses.push(c)
+    return {
+      type: 'gre',
+      netplan_tunnel: {
+        mode: 'gre',
+        local: gre.local,
+        remote: gre.remote,
+        ...(addresses.length ? { addresses } : {}),
+        ...(gre.ttl ? { ttl: Number(gre.ttl) } : {}),
+        ...(gre.key !== '' && gre.key != null ? { key: Number(gre.key) } : {}),
+      },
+    }
+  }
+  if (kind.value === 'vxlan') {
+    const addresses = []
+    const c = String(vxlan.address_cidr || '').trim()
+    if (c) addresses.push(c)
+    return {
+      type: 'vxlan',
+      netplan_tunnel: {
+        mode: 'vxlan',
+        id: Number(vxlan.vni),
+        local: vxlan.local || undefined,
+        remote: vxlan.remote || undefined,
+        port: Number(vxlan.port) || 8472,
+        ttl: Number(vxlan.ttl) || 255,
+        ...(addresses.length ? { addresses } : {}),
+      },
+    }
+  }
+  return {
+    type: 'wireguard',
+    netplan_tunnel: {
+      mode: 'wireguard',
+      addresses: wg.addresses
+        .split(/[,\s]+/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+      keys: { private: wg.private_key },
+      listen_port: Number(wg.listen_port) || 51820,
+      peers: [
+        {
+          public_key: wg.peer_public_key,
+          endpoint: wg.peer_endpoint || undefined,
+          allowed_ips: wg.peer_allowed_ips
+            .split(/[,\s]+/)
+            .map((s) => s.trim())
+            .filter(Boolean),
+          persistent_keepalive: Number(wg.persistent_keepalive) || undefined,
+        },
+      ],
+    },
+  }
+}
+
+function ifnameForKind() {
+  if (kind.value === 'gre') return gre.ifname
+  if (kind.value === 'vxlan') return vxlan.ifname
+  return wg.ifname
+}
+
+function openCreate() {
+  editingId.value = null
+  kind.value = 'gre'
+  gre.ifname = ''
+  gre.local = ''
+  gre.remote = ''
+  gre.ttl = 64
+  gre.key = ''
+  gre.address_cidr = ''
+  vxlan.ifname = ''
+  vxlan.vni = 100
+  vxlan.local = ''
+  vxlan.remote = ''
+  vxlan.address_cidr = ''
+  vxlan.port = 8472
+  vxlan.ttl = 255
+  wg.ifname = ''
+  wg.addresses = ''
+  wg.listen_port = 51820
+  wg.private_key = ''
+  wg.peer_public_key = ''
+  wg.peer_endpoint = ''
+  wg.peer_allowed_ips = '0.0.0.0/0'
+  wg.persistent_keepalive = 25
+  remark.value = ''
+  dlg.value = true
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  kind.value = row.kind
+  remark.value = row.remark || ''
+  const s = row.spec || {}
+  if (row.kind === 'gre') {
+    const t = s.netplan_tunnel || {}
+    gre.ifname = row.ifname
+    gre.local = t.local || ''
+    gre.remote = t.remote || ''
+    gre.ttl = t.ttl ?? 64
+    gre.key = t.key != null ? String(t.key) : ''
+    const a = t.addresses
+    gre.address_cidr = Array.isArray(a) && a[0] ? String(a[0]) : typeof a === 'string' ? a : ''
+  } else if (row.kind === 'vxlan') {
+    const t = s.netplan_tunnel || {}
+    vxlan.ifname = row.ifname
+    vxlan.vni = t.id ?? 100
+    vxlan.local = t.local || ''
+    vxlan.remote = t.remote || ''
+    vxlan.port = t.port ?? 8472
+    vxlan.ttl = t.ttl ?? 255
+    const a = t.addresses
+    vxlan.address_cidr = Array.isArray(a) && a[0] ? String(a[0]) : typeof a === 'string' ? a : ''
+  } else {
+    const t = s.netplan_tunnel || {}
+    wg.ifname = row.ifname
+    wg.addresses = (t.addresses || []).join(', ')
+    wg.listen_port = t.listen_port ?? 51820
+    wg.private_key = t.keys?.private || ''
+    const p = (t.peers && t.peers[0]) || {}
+    wg.peer_public_key = p.public_key || ''
+    wg.peer_endpoint = p.endpoint || ''
+    wg.peer_allowed_ips = (p.allowed_ips || []).join(', ') || '0.0.0.0/0'
+    wg.persistent_keepalive = p.persistent_keepalive ?? 25
+  }
+  dlg.value = true
+}
+
+async function save() {
+  const name = (ifnameForKind() || '').trim()
+  if (!name) {
+    ElMessage.error('请填写接口名')
+    return
+  }
+  if (kind.value === 'gre') {
+    if (!isCidr(gre.address_cidr)) {
+      ElMessage.error('请填写本端接口 IP/掩码（CIDR，例如 10.0.0.1/30）')
+      return
+    }
+  } else if (kind.value === 'vxlan') {
+    if (!isCidr(vxlan.address_cidr)) {
+      ElMessage.error('请填写本端接口 IP/掩码（CIDR）')
+      return
+    }
+  } else {
+    const parts = wg.addresses
+      .split(/[,\s]+/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+    if (!parts.length || !parts.every(isCidr)) {
+      ElMessage.error('WireGuard 本端地址需为 CIDR，如 10.0.0.1/24')
+      return
+    }
+  }
+  saving.value = true
+  try {
+    const body = {
+      kind: kind.value,
+      ifname: name,
+      spec: buildSpec(),
+      remark: remark.value || '',
+    }
+    if (editingId.value) {
+      await interfaceApi.patchDesiredTunnel(editingId.value, body)
+      ElMessage.success('已更新到后端')
+    } else {
+      await interfaceApi.createDesiredTunnel(body)
+      ElMessage.success('已同步到后端')
+    }
+    dlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  try {
+    await ElMessageBox.confirm(`删除意图配置 ${row.ifname}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  try {
+    await interfaceApi.deleteDesiredTunnel(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '删除失败')
+  }
+}
+
+const drawerRow = ref(null)
+const drawerOpen = ref(false)
+
+function tunnelCidrs(row) {
+  const t = (row.spec || {}).netplan_tunnel || {}
+  const a = t.addresses
+  if (Array.isArray(a)) return a.filter(Boolean).join(', ')
+  if (typeof a === 'string') return a
+  return '—'
+}
+
+function showJson(row) {
+  drawerRow.value = row
+  drawerOpen.value = true
+}
+
+async function load() {
+  loading.value = true
+  try {
+    rows.value = await interfaceApi.listDesiredTunnels()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const applying = ref(false)
+
+async function applyToSystem() {
+  if (!rows.value.length) {
+    ElMessage.warning('没有可下发的隧道配置')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      '将依据当前数据库生成 netplan 片段：GRE/VXLAN 经 netplan generate → netplan try；WireGuard 使用 python-wireguard 库写入内核并再写入 netplan 持久化片段。需 root/能力（改 /etc/netplan、执行 netplan、加载 py-wireguard.so）。是否继续？',
+      '下发到系统',
+      { type: 'warning', confirmButtonText: '继续' },
+    )
+  } catch {
+    return
+  }
+  applying.value = true
+  try {
+    const { data } = await interfaceApi.applyDesiredTunnelsToSystem()
+    if (data.ok) {
+      ElMessage.success('netplan 已校验并由 try 确认应用')
+    } else {
+      await ElMessageBox.alert(
+        `<pre style="white-space:pre-wrap;font-size:12px;max-height:400px;overflow:auto">${JSON.stringify(
+          data,
+          null,
+          2,
+        )}</pre>`,
+        '下发失败',
+        { dangerouslyUseHTMLString: true },
+      )
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    await ElMessageBox.alert(
+      `<pre style="white-space:pre-wrap;font-size:12px">${JSON.stringify(d || e.message, null, 2)}</pre>`,
+      '请求失败',
+      { dangerouslyUseHTMLString: true },
+    )
+  } finally {
+    applying.value = false
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="page">
+    <el-alert
+      title="填写本端 IP/掩码（CIDR）并保存后，可「下发到系统」：GRE/VXLAN 写入 99-pemanager-tunnels.yaml 并经 netplan try；WireGuard 由 python-wireguard（须 pip 安装且 Linux 加载自带 .so）应用，并写入 99-pemanager-wireguard.yaml。Django 须具 root 或 sudo -n 等权限。"
+      type="warning"
+      show-icon
+      :closable="false"
+      class="hint"
+    />
+
+    <div class="toolbar">
+      <el-button type="success" :loading="applying" @click="applyToSystem">下发到系统 (netplan)</el-button>
+      <el-button type="primary" @click="openCreate">新增配置</el-button>
+      <el-button :loading="loading" @click="load">刷新</el-button>
+    </div>
+
+    <el-table :data="rows" border size="small" v-loading="loading">
+      <el-table-column prop="ifname" label="接口" width="160" />
+      <el-table-column prop="kind" label="类型" width="110" />
+      <el-table-column label="本端 CIDR" min-width="140" show-overflow-tooltip>
+        <template #default="{ row }">{{ tunnelCidrs(row) }}</template>
+      </el-table-column>
+      <el-table-column prop="remark" label="备注" show-overflow-tooltip />
+      <el-table-column prop="updated_at" label="更新时间" width="190" />
+      <el-table-column label="操作" width="200" fixed="right">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="showJson(row)">JSON</el-button>
+          <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+          <el-button link type="danger" @click="remove(row)">删除</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-dialog v-model="dlg" :title="title" width="640px" destroy-on-close>
+      <el-form label-width="120px">
+        <el-form-item label="类型">
+          <el-radio-group v-model="kind" :disabled="Boolean(editingId)">
+            <el-radio-button label="gre">GRE</el-radio-button>
+            <el-radio-button label="vxlan">VXLAN</el-radio-button>
+            <el-radio-button label="wireguard">WireGuard</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+
+        <template v-if="kind === 'gre'">
+          <el-form-item label="接口名" required>
+            <el-input v-model="gre.ifname" placeholder="例如 gre-pe1" :disabled="Boolean(editingId)" />
+          </el-form-item>
+          <el-form-item label="本端 IP/掩码" required>
+            <el-input v-model="gre.address_cidr" placeholder="CIDR，如 10.0.0.1/30" />
+          </el-form-item>
+          <el-form-item label="local" required>
+            <el-input v-model="gre.local" placeholder="本端隧道地址" />
+          </el-form-item>
+          <el-form-item label="remote" required>
+            <el-input v-model="gre.remote" placeholder="对端隧道地址" />
+          </el-form-item>
+          <el-form-item label="TTL">
+            <el-input-number v-model="gre.ttl" :min="1" :max="255" />
+          </el-form-item>
+          <el-form-item label="key (可选)">
+            <el-input v-model="gre.key" placeholder="数字密钥，可无" />
+          </el-form-item>
+        </template>
+
+        <template v-else-if="kind === 'vxlan'">
+          <el-form-item label="接口名" required>
+            <el-input v-model="vxlan.ifname" placeholder="例如 vxlan100" :disabled="Boolean(editingId)" />
+          </el-form-item>
+          <el-form-item label="本端 IP/掩码" required>
+            <el-input v-model="vxlan.address_cidr" placeholder="CIDR，如 192.168.10.1/24" />
+          </el-form-item>
+          <el-form-item label="VNI" required>
+            <el-input-number v-model="vxlan.vni" :min="1" :max="16777215" />
+          </el-form-item>
+          <el-form-item label="local">
+            <el-input v-model="vxlan.local" placeholder="源 VTEP IP" />
+          </el-form-item>
+          <el-form-item label="remote">
+            <el-input v-model="vxlan.remote" placeholder="远端 VTEP IP（点对多时可为空）" />
+          </el-form-item>
+          <el-form-item label="UDP 端口">
+            <el-input-number v-model="vxlan.port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item label="TTL">
+            <el-input-number v-model="vxlan.ttl" :min="1" :max="255" />
+          </el-form-item>
+        </template>
+
+        <template v-else>
+          <el-form-item label="接口名" required>
+            <el-input v-model="wg.ifname" placeholder="例如 wg-pe" :disabled="Boolean(editingId)" />
+          </el-form-item>
+          <el-form-item label="本端 IP/掩码(CIDR)" required>
+            <el-input v-model="wg.addresses" placeholder="如 10.200.0.5/24；多个用逗号分隔" />
+          </el-form-item>
+          <el-form-item label="监听端口">
+            <el-input-number v-model="wg.listen_port" :min="1" :max="65535" />
+          </el-form-item>
+          <el-form-item label="私钥">
+            <el-input v-model="wg.private_key" type="password" show-password autocomplete="off" />
+          </el-form-item>
+          <el-form-item label="对端公钥">
+            <el-input v-model="wg.peer_public_key" />
+          </el-form-item>
+          <el-form-item label="对端 endpoint">
+            <el-input v-model="wg.peer_endpoint" placeholder="host:51820" />
+          </el-form-item>
+          <el-form-item label="allowed_ips">
+            <el-input v-model="wg.peer_allowed_ips" />
+          </el-form-item>
+          <el-form-item label="keepalive(秒)">
+            <el-input-number v-model="wg.persistent_keepalive" :min="0" :max="65535" />
+          </el-form-item>
+        </template>
+
+        <el-form-item label="备注">
+          <el-input v-model="remark" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dlg = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存到后端</el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="drawerOpen" title="spec JSON" size="50%">
+      <JsonBlock v-if="drawerRow" :data="drawerRow" :rows="26" />
+    </el-drawer>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.toolbar {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+}
+.hint {
+  margin-bottom: 4px;
+}
+</style>

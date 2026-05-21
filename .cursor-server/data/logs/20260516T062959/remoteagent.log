@@ -166,3 +166,32 @@
 2026-05-16 07:17:01.394 [warning] RequestStore#acceptReply was called without receiving a matching request 118
 2026-05-16 07:17:01.395 [warning] RequestStore#acceptReply was called without receiving a matching request 119
 2026-05-16 07:17:01.395 [warning] RequestStore#acceptReply was called without receiving a matching request 120
+2026-05-16 09:30:12.443 [warning] [File Watcher (node.js)] Watcher shutdown because watched path got deleted
+2026-05-16 09:33:56.585 [warning] RequestStore#acceptReply was called without receiving a matching request 121
+2026-05-16 09:33:56.586 [warning] RequestStore#acceptReply was called without receiving a matching request 122
+2026-05-16 09:33:56.587 [warning] RequestStore#acceptReply was called without receiving a matching request 123
+2026-05-16 09:33:56.587 [warning] RequestStore#acceptReply was called without receiving a matching request 124
+2026-05-16 09:33:56.587 [warning] RequestStore#acceptReply was called without receiving a matching request 125
+2026-05-16 09:33:56.588 [warning] RequestStore#acceptReply was called without receiving a matching request 126
+2026-05-16 09:33:56.588 [warning] RequestStore#acceptReply was called without receiving a matching request 127
+2026-05-16 09:33:56.588 [warning] RequestStore#acceptReply was called without receiving a matching request 128
+2026-05-16 09:33:56.588 [warning] RequestStore#acceptReply was called without receiving a matching request 129
+2026-05-16 09:33:56.589 [warning] RequestStore#acceptReply was called without receiving a matching request 130
+2026-05-16 09:33:56.589 [warning] RequestStore#acceptReply was called without receiving a matching request 131
+2026-05-16 09:33:56.589 [warning] RequestStore#acceptReply was called without receiving a matching request 132
+2026-05-16 09:40:02.654 [warning] RequestStore#acceptReply was called without receiving a matching request 133
+2026-05-16 09:40:02.655 [warning] RequestStore#acceptReply was called without receiving a matching request 134
+2026-05-16 09:40:02.655 [warning] RequestStore#acceptReply was called without receiving a matching request 135
+2026-05-16 09:40:02.655 [warning] RequestStore#acceptReply was called without receiving a matching request 136
+2026-05-16 09:40:02.656 [warning] RequestStore#acceptReply was called without receiving a matching request 137
+2026-05-16 09:40:02.656 [warning] RequestStore#acceptReply was called without receiving a matching request 138
+2026-05-16 09:40:02.656 [warning] RequestStore#acceptReply was called without receiving a matching request 139
+2026-05-16 09:40:02.657 [warning] RequestStore#acceptReply was called without receiving a matching request 140
+2026-05-16 09:40:02.657 [warning] RequestStore#acceptReply was called without receiving a matching request 141
+2026-05-16 09:40:02.657 [warning] RequestStore#acceptReply was called without receiving a matching request 142
+2026-05-16 09:40:02.657 [warning] RequestStore#acceptReply was called without receiving a matching request 143
+2026-05-16 09:40:02.657 [warning] RequestStore#acceptReply was called without receiving a matching request 144
+2026-05-16 10:55:56.490 [info] [<unknown>][e51b0221][ManagementConnection] The client has disconnected gracefully, so the connection will be disposed.
+2026-05-16 10:55:56.668 [info] [<unknown>][d21a8e61][ExtensionHostConnection] <487533> Extension Host Process exited with code: 0, signal: null.
+2026-05-16 10:55:56.669 [info] Last EH closed, waiting before shutting down
+2026-05-16 11:00:56.671 [info] Last EH closed, shutting down

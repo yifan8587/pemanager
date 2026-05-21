@@ -1,0 +1,64 @@
+<script setup>
+import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Document } from '@element-plus/icons-vue'
+import { resourceApi } from '../../api/resourceApi'
+import JsonBlock from '../../components/JsonBlock.vue'
+import PageHeader from '../../components/PageHeader.vue'
+
+const loading = ref(false)
+const rows = ref([])
+const drawer = ref(false)
+const current = ref(null)
+
+async function load() {
+  loading.value = true
+  try {
+    rows.value = await resourceApi.listLogs()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openDetail(row) {
+  current.value = row
+  drawer.value = true
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader title="分配日志" description="IP / 带宽分配的变更与同步记录" :icon="Document">
+      <template #actions>
+        <el-button :loading="loading" @click="load">刷新</el-button>
+      </template>
+    </PageHeader>
+    <el-table :data="rows" border v-loading="loading" size="small">
+      <el-table-column prop="created_at" label="时间" width="190" />
+      <el-table-column prop="action" label="操作" width="160" />
+      <el-table-column prop="actor" label="操作者" width="120" />
+      <el-table-column prop="summary" label="摘要" />
+      <el-table-column label="明细" width="100">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="openDetail(row)">查看</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+
+    <el-drawer v-model="drawer" title="日志明细" size="50%">
+      <JsonBlock v-if="current" :data="current.detail || {}" :rows="24" />
+    </el-drawer>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+</style>

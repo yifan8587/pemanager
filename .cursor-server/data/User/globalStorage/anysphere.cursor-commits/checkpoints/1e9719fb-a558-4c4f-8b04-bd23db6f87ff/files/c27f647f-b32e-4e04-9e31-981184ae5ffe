@@ -1,0 +1,204 @@
+<script setup>
+import { computed, onMounted, ref, watch } from 'vue'
+import { ElMessage } from 'element-plus'
+import { operationApi } from '../../api/operationApi'
+import { interfaceApi } from '../../api/interfaceApi'
+import EChart from '../../components/EChart.vue'
+
+const targets = ref([])
+const ifaces = ref([])
+
+const targetId = ref('')
+const bucket = ref('hour')
+const since = ref('')
+const until = ref('')
+const latencyPoints = ref([])
+const loadingLatency = ref(false)
+
+const interfaceName = ref('')
+const trafficPoints = ref([])
+const loadingTraffic = ref(false)
+
+async function loadDictionaries() {
+  try {
+    targets.value = await operationApi.listTargets()
+  } catch {
+    targets.value = []
+  }
+  try {
+    const { data } = await interfaceApi.liveInventory()
+    ifaces.value = data.interfaces || []
+  } catch {
+    ifaces.value = []
+  }
+}
+
+async function loadLatency() {
+  if (!targetId.value) {
+    latencyPoints.value = []
+    return
+  }
+  loadingLatency.value = true
+  try {
+    const params = { bucket: bucket.value }
+    if (since.value) params.since = since.value
+    if (until.value) params.until = until.value
+    const data = await operationApi.latencySeries(targetId.value, params)
+    latencyPoints.value = data.points || []
+  } catch (e) {
+    ElMessage.error('加载延迟系列失败')
+  } finally {
+    loadingLatency.value = false
+  }
+}
+
+async function loadTraffic() {
+  if (!interfaceName.value) {
+    trafficPoints.value = []
+    return
+  }
+  loadingTraffic.value = true
+  try {
+    const params = { interface: interfaceName.value, bucket: bucket.value }
+    if (since.value) params.since = since.value
+    if (until.value) params.until = until.value
+    const data = await operationApi.trafficSeries(params)
+    trafficPoints.value = data.points || []
+  } catch (e) {
+    ElMessage.error('加载流量系列失败')
+  } finally {
+    loadingTraffic.value = false
+  }
+}
+
+const latencyOption = computed(() => {
+  const x = latencyPoints.value.map((p) => p.bucket)
+  return {
+    grid: { left: 50, right: 16, top: 30, bottom: 30 },
+    legend: { data: ['avg ms', 'max ms', 'loss %'] },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: x },
+    yAxis: [
+      { type: 'value', name: 'ms' },
+      { type: 'value', name: '%', position: 'right', min: 0, max: 100 },
+    ],
+    series: [
+      { name: 'avg ms', type: 'line', smooth: true, data: latencyPoints.value.map((p) => p.rtt_avg_ms) },
+      { name: 'max ms', type: 'line', smooth: true, data: latencyPoints.value.map((p) => p.rtt_max_ms) },
+      {
+        name: 'loss %',
+        type: 'bar',
+        yAxisIndex: 1,
+        data: latencyPoints.value.map((p) => p.loss_pct),
+        itemStyle: { color: '#f56c6c' },
+      },
+    ],
+  }
+})
+
+const trafficOption = computed(() => {
+  const x = trafficPoints.value.map((p) => p.bucket)
+  return {
+    grid: { left: 50, right: 16, top: 30, bottom: 30 },
+    legend: { data: ['RX 平均 Mbps', 'TX 平均 Mbps', 'RX 峰值 Mbps', 'TX 峰值 Mbps'] },
+    tooltip: { trigger: 'axis' },
+    xAxis: { type: 'category', data: x },
+    yAxis: { type: 'value', name: 'Mbps' },
+    series: [
+      {
+        name: 'RX 平均 Mbps',
+        type: 'line',
+        smooth: true,
+        areaStyle: { opacity: 0.1 },
+        data: trafficPoints.value.map((p) => ((p.rx_bps_avg || 0) / 1e6).toFixed(3)),
+      },
+      {
+        name: 'TX 平均 Mbps',
+        type: 'line',
+        smooth: true,
+        areaStyle: { opacity: 0.1 },
+        data: trafficPoints.value.map((p) => ((p.tx_bps_avg || 0) / 1e6).toFixed(3)),
+      },
+      {
+        name: 'RX 峰值 Mbps',
+        type: 'line',
+        smooth: true,
+        lineStyle: { type: 'dashed' },
+        data: trafficPoints.value.map((p) => ((p.rx_bps_max || 0) / 1e6).toFixed(3)),
+      },
+      {
+        name: 'TX 峰值 Mbps',
+        type: 'line',
+        smooth: true,
+        lineStyle: { type: 'dashed' },
+        data: trafficPoints.value.map((p) => ((p.tx_bps_max || 0) / 1e6).toFixed(3)),
+      },
+    ],
+  }
+})
+
+function refreshAll() {
+  if (targetId.value) loadLatency()
+  if (interfaceName.value) loadTraffic()
+}
+watch([bucket, since, until], refreshAll)
+watch(targetId, loadLatency)
+watch(interfaceName, loadTraffic)
+
+onMounted(loadDictionaries)
+</script>
+
+<template>
+  <div class="page">
+    <el-alert
+      type="info"
+      :closable="false"
+      title="按小时 / 天 / 月 聚合呈现：延迟 (rtt avg/max) + 丢包率；接口流量平均与峰值 (Mbps)。"
+    />
+    <el-card shadow="never">
+      <template #header>查询条件</template>
+      <div class="row">
+        <el-select v-model="bucket" style="width: 140px">
+          <el-option label="按小时" value="hour" />
+          <el-option label="按天" value="day" />
+          <el-option label="按月" value="month" />
+        </el-select>
+        <el-date-picker v-model="since" type="datetime" placeholder="since" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 220px" />
+        <el-date-picker v-model="until" type="datetime" placeholder="until" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 220px" />
+        <el-button @click="refreshAll">刷新</el-button>
+      </div>
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header>
+        <div class="row">
+          <span>延迟 / 丢包</span>
+          <div class="spacer" />
+          <el-select v-model="targetId" placeholder="选择监控目标" filterable clearable style="width: 280px">
+            <el-option v-for="t in targets" :key="t.id" :label="`${t.name} (${t.address})`" :value="t.id" />
+          </el-select>
+        </div>
+      </template>
+      <EChart :option="latencyOption" :loading="loadingLatency" :height="340" />
+    </el-card>
+
+    <el-card shadow="never">
+      <template #header>
+        <div class="row">
+          <span>接口流量</span>
+          <div class="spacer" />
+          <el-select v-model="interfaceName" placeholder="选择接口" filterable clearable style="width: 280px">
+            <el-option v-for="i in ifaces" :key="i.ifname" :label="`${i.ifname} (${i.kind})`" :value="i.ifname" />
+          </el-select>
+        </div>
+      </template>
+      <EChart :option="trafficOption" :loading="loadingTraffic" :height="340" />
+    </el-card>
+  </div>
+</template>
+
+<style scoped>
+.page { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+</style>

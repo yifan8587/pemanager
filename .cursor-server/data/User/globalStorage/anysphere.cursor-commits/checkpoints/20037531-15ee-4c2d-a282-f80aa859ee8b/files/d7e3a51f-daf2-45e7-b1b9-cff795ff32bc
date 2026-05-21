@@ -1,0 +1,115 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+const routes = [
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('../views/HomeView.vue'),
+    meta: { title: '首页' },
+  },
+  { path: '/resourcemanage', redirect: '/resourcemanage/summary' },
+  {
+    path: '/resourcemanage/summary',
+    name: 'resource-summary',
+    component: () => import('../views/resource/ResourceSummary.vue'),
+    meta: { title: '资源概览' },
+  },
+  {
+    path: '/resourcemanage/customers',
+    name: 'resource-customers',
+    component: () => import('../views/resource/ResourceCustomers.vue'),
+    meta: { title: '客户' },
+  },
+  {
+    path: '/resourcemanage/ip-addresses',
+    name: 'resource-ip-addresses',
+    component: () => import('../views/resource/ResourceIpAddresses.vue'),
+    meta: { title: 'IP 地址' },
+  },
+  {
+    path: '/resourcemanage/bandwidth',
+    name: 'resource-bandwidth',
+    component: () => import('../views/resource/ResourceBandwidth.vue'),
+    meta: { title: '带宽' },
+  },
+  {
+    path: '/resourcemanage/allocation-logs',
+    name: 'resource-allocation-logs',
+    component: () => import('../views/resource/ResourceLogs.vue'),
+    meta: { title: '分配日志' },
+  },
+  {
+    path: '/resourcemanage/inbound-sync',
+    name: 'resource-inbound-sync',
+    component: () => import('../views/resource/ResourceInboundSync.vue'),
+    meta: { title: '资源回写' },
+  },
+
+  { path: '/interfacemanage', redirect: '/interfacemanage/live' },
+  {
+    path: '/interfacemanage/live',
+    name: 'iface-live',
+    component: () => import('../views/interface/InterfaceLive.vue'),
+    meta: { title: '接口实时' },
+  },
+  {
+    path: '/interfacemanage/live/:ifname',
+    name: 'iface-live-detail',
+    component: () => import('../views/interface/InterfaceLiveDetail.vue'),
+    meta: { title: '接口详情' },
+  },
+  {
+    path: '/interfacemanage/db-mirror',
+    name: 'iface-db-mirror',
+    component: () => import('../views/interface/InterfaceDbMirror.vue'),
+    meta: { title: '配置镜像库' },
+  },
+  {
+    path: '/interfacemanage/sources',
+    name: 'iface-sources',
+    component: () => import('../views/interface/InterfaceSources.vue'),
+    meta: { title: '原始采集' },
+  },
+  {
+    path: '/interfacemanage/tunnel-config',
+    name: 'iface-tunnel-config',
+    component: () => import('../views/interface/InterfaceTunnelDesired.vue'),
+    meta: { title: '隧道接口配置' },
+  },
+
+  {
+    path: '/routemanage',
+    name: 'routemanage',
+    component: () => import('../views/ModulePlaceholder.vue'),
+    meta: { title: '路由管理', apiPrefix: '/api/routemanage/' },
+  },
+  {
+    path: '/qosmanage',
+    name: 'qosmanage',
+    component: () => import('../views/ModulePlaceholder.vue'),
+    meta: { title: 'QoS 管理', apiPrefix: '/api/qosmanage/' },
+  },
+  {
+    path: '/firewallmanage',
+    name: 'firewallmanage',
+    component: () => import('../views/ModulePlaceholder.vue'),
+    meta: { title: '防火墙管理', apiPrefix: '/api/firewallmanage/' },
+  },
+  {
+    path: '/operationmanage',
+    name: 'operationmanage',
+    component: () => import('../views/ModulePlaceholder.vue'),
+    meta: { title: '运维管理', apiPrefix: '/api/operationmanage/' },
+  },
+  {
+    path: '/logmanage',
+    name: 'logmanage',
+    component: () => import('../views/ModulePlaceholder.vue'),
+    meta: { title: '日志管理', apiPrefix: '/api/logmanage/' },
+  },
+]
+
+export default createRouter({
+  history: createWebHistory(),
+  routes,
+})

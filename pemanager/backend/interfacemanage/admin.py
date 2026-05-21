@@ -1,3 +1,31 @@
 from django.contrib import admin
 
-# Register your models here.
+from interfacemanage.models import DesiredTunnelConfig, NetplanFileRecord, NetworkInterfaceRecord, NetworkSyncRun
+
+
+@admin.register(DesiredTunnelConfig)
+class DesiredTunnelConfigAdmin(admin.ModelAdmin):
+    list_display = ('ifname', 'kind', 'remark', 'updated_at')
+    list_filter = ('kind',)
+    search_fields = ('ifname', 'remark')
+
+
+@admin.register(NetworkSyncRun)
+class NetworkSyncRunAdmin(admin.ModelAdmin):
+    list_display = ('id', 'started_at', 'finished_at', 'success')
+    list_filter = ('success',)
+    readonly_fields = ('id', 'started_at', 'finished_at', 'success', 'error_message', 'stats')
+
+
+@admin.register(NetplanFileRecord)
+class NetplanFileRecordAdmin(admin.ModelAdmin):
+    list_display = ('path', 'file_sha256', 'size_bytes', 'updated_at')
+    search_fields = ('path',)
+    readonly_fields = ('updated_at',)
+
+
+@admin.register(NetworkInterfaceRecord)
+class NetworkInterfaceRecordAdmin(admin.ModelAdmin):
+    list_display = ('ifname', 'kind', 'admin_up', 'operstate', 'ifindex', 'content_sha256', 'last_seen_at')
+    list_filter = ('kind', 'admin_up', 'operstate')
+    search_fields = ('ifname', 'mac')

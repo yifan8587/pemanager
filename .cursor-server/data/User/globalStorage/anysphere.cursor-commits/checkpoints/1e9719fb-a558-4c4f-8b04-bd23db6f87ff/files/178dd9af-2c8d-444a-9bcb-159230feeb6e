@@ -1,0 +1,203 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { resourceApi } from '../../api/resourceApi'
+
+const loading = ref(false)
+const rows = ref([])
+const customers = ref([])
+
+const filters = reactive({ state: '', q: '' })
+const filtered = computed(() => {
+  let r = rows.value.slice()
+  if (filters.state) r = r.filter((x) => x.state === filters.state)
+  if (filters.q) {
+    const q = filters.q.toLowerCase()
+    r = r.filter(
+      (x) =>
+        String(x.address).toLowerCase().includes(q) ||
+        String(x.interface_code || '').toLowerCase().includes(q) ||
+        String(x.customer_code || '').toLowerCase().includes(q),
+    )
+  }
+  return r
+})
+
+const actionDlg = ref(false)
+const actionKind = ref('allocate')
+const actionLabel = computed(() => {
+  if (actionKind.value === 'reserve') return '预留 IP'
+  if (actionKind.value === 'allocate') return '分配 IP'
+  return '释放 IP'
+})
+const actionForm = reactive({
+  address: '',
+  customer_code: '',
+  interface_code: '',
+  subnet_label: '',
+  allow_from_reserved: true,
+})
+
+async function load() {
+  loading.value = true
+  try {
+    const [ips, cust] = await Promise.all([resourceApi.listIps(), resourceApi.listCustomers()])
+    rows.value = ips
+    customers.value = cust
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function openAction(kind) {
+  actionKind.value = kind
+  actionForm.address = ''
+  actionForm.customer_code = ''
+  actionForm.interface_code = ''
+  actionForm.subnet_label = ''
+  actionForm.allow_from_reserved = true
+  actionDlg.value = true
+}
+
+async function submitAction() {
+  try {
+    const base = {
+      address: actionForm.address,
+      customer_code: actionForm.customer_code || undefined,
+      interface_code: actionForm.interface_code,
+      subnet_label: actionForm.subnet_label,
+    }
+    if (actionKind.value === 'reserve') {
+      await resourceApi.reserveIp(base)
+    } else if (actionKind.value === 'allocate') {
+      await resourceApi.allocateIp({
+        ...base,
+        allow_from_reserved: actionForm.allow_from_reserved,
+      })
+    } else {
+      await resourceApi.releaseIp({ address: actionForm.address })
+    }
+    ElMessage.success('操作成功')
+    actionDlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '操作失败')
+  }
+}
+
+const addDlg = ref(false)
+const addForm = reactive({ address: '', state: 'available', subnet_label: '' })
+async function createRaw() {
+  try {
+    await resourceApi.createIp({
+      address: addForm.address,
+      state: addForm.state,
+      subnet_label: addForm.subnet_label,
+    })
+    ElMessage.success('已创建')
+    addDlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '创建失败')
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="page">
+    <div class="toolbar">
+      <el-select v-model="filters.state" placeholder="状态" clearable style="width: 140px">
+        <el-option label="available" value="available" />
+        <el-option label="reserved" value="reserved" />
+        <el-option label="allocated" value="allocated" />
+      </el-select>
+      <el-input v-model="filters.q" placeholder="搜索 IP / 接口 / 客户" clearable style="width: 240px" />
+      <div class="spacer" />
+      <el-button @click="addDlg = true">录入 IP</el-button>
+      <el-button @click="openAction('reserve')">预留</el-button>
+      <el-button type="primary" @click="openAction('allocate')">分配</el-button>
+      <el-button type="danger" plain @click="openAction('release')">释放</el-button>
+      <el-button :loading="loading" @click="load">刷新</el-button>
+    </div>
+
+    <el-table :data="filtered" border v-loading="loading" size="small">
+      <el-table-column prop="address" label="IP" width="140" />
+      <el-table-column prop="state" label="状态" width="110" />
+      <el-table-column prop="subnet_label" label="分组" width="140" />
+      <el-table-column prop="customer_code" label="客户" width="120" />
+      <el-table-column prop="interface_code" label="接口" />
+    </el-table>
+
+    <el-dialog v-model="actionDlg" :title="actionLabel" width="520px">
+      <el-form label-width="100px">
+        <el-form-item label="IP 地址" required>
+          <el-input v-model="actionForm.address" :disabled="actionKind === 'release' ? false : false" />
+        </el-form-item>
+        <template v-if="actionKind !== 'release'">
+          <el-form-item label="客户编码">
+            <el-select v-model="actionForm.customer_code" filterable clearable placeholder="可选">
+              <el-option v-for="c in customers" :key="c.id" :label="`${c.code} — ${c.name}`" :value="c.code" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="接口标识">
+            <el-input v-model="actionForm.interface_code" />
+          </el-form-item>
+          <el-form-item label="分组标签">
+            <el-input v-model="actionForm.subnet_label" />
+          </el-form-item>
+          <el-form-item v-if="actionKind === 'allocate'" label="允许预留→分配">
+            <el-switch v-model="actionForm.allow_from_reserved" />
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="actionDlg = false">取消</el-button>
+        <el-button type="primary" @click="submitAction">提交</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="addDlg" title="录入可用 IP" width="480px">
+      <el-form label-width="100px">
+        <el-form-item label="IP">
+          <el-input v-model="addForm.address" />
+        </el-form-item>
+        <el-form-item label="初始状态">
+          <el-select v-model="addForm.state">
+            <el-option label="available" value="available" />
+            <el-option label="reserved" value="reserved" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="分组">
+          <el-input v-model="addForm.subnet_label" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="addDlg = false">取消</el-button>
+        <el-button type="primary" @click="createRaw">创建</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+}
+.spacer {
+  flex: 1;
+}
+</style>

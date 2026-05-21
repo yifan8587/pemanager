@@ -1,0 +1,1321 @@
+IPRoute module — pyroute2 0.4.0.post32 documentation
+
+# IPRoute module¶
+
+## iproute quickstart¶
+
+IPRoute in two words:
+
+```
+$ sudo pip install pyroute2
+
+$ cat example.py
+from pyroute2 import IPRoute
+ip = IPRoute()
+print([x.get_attr('IFLA_IFNAME') for x in ip.get_links()])
+
+$ python example.py
+['lo', 'p6p1', 'wlan0', 'virbr0', 'virbr0-nic']
+
+```
+
+## threaded vs. threadless architecture¶
+
+Since v0.3.2, IPRoute class is threadless by default. It spawns no additional threads, and receives only responses to own requests, no broadcast messages. So, if you prefer not to cope with implicit threading, you can safely use this module.
+
+To get broadcast messages, use IPRoute.bind() call. Please notice, that after calling IPRoute.bind() you MUST get all the messages in time. In the case of the kernel buffer overflow, you will have to restart the socket.
+
+With IPRoute.bind(async=True) one can launch async message receiver thread with Queue-based buffer. The buffer is thread-safe and completely transparent from the programmer’s perspective. Please read also NetlinkSocket documentation to know more about async mode.
+
+## think about IPDB¶
+
+If you plan to regularly fetch loads of objects, think about IPDB also. Unlike to IPRoute, IPDB does not fetch all the objects from OS every time you request them, but keeps a cache that is asynchronously updated by the netlink broadcasts. For a long-term running programs, that often retrieve info about hundreds or thousands of objects, it can be better to use IPDB as it will load CPU significantly less.
+
+## API¶
+
+class pyroute2.iproute.IPBatch(fileno=None)¶
+
+Netlink requests compiler. Does not send any requests, but instead stores them in the internal binary buffer. The contents of the buffer can be used to send batch requests, to test custom netlink parsers and so on.
+
+Uses IPRouteMixin and provides all the same API as normal IPRoute objects:
+
+```
+# create the batch compiler
+ipb = IPBatch()
+# compile requests into the internal buffer
+ipb.link("add", index=550, ifname="test", kind="dummy")
+ipb.link("set", index=550, state="up")
+ipb.addr("add", index=550, address="10.0.0.2", mask=24)
+# save the buffer
+data = ipb.batch
+# reset the buffer
+ipb.reset()
+...
+# send the buffer
+IPRoute().sendto(data, (0, 0))
+
+```
+
+class pyroute2.iproute.IPRoute(fileno=None)¶
+
+Public class that provides RTNL API to the current network namespace.
+
+class pyroute2.iproute.IPRouteMixin¶
+
+IPRouteMixin should not be instantiated by itself. It is intended to be used as a mixin class that provides RTNL API. Following classes use IPRouteMixin:
+
+- IPRoute – RTNL API to the current network namespace
+- NetNS – RTNL API to another network namespace
+- IPBatch – RTNL compiler
+
+It is an old-school API, that provides access to rtnetlink as is. It helps you to retrieve and change almost all the data, available through rtnetlink:
+
+```
+from pyroute2 import IPRoute
+ipr = IPRoute()
+# create an interface
+ipr.link('add', ifname='brx', kind='bridge')
+# lookup the index
+dev = ipr.link_lookup(ifname='brx')[0]
+# bring it down
+ipr.link('set', index=dev, state='down')
+# change the interface MAC address and rename it just for fun
+ipr.link('set', index=dev,
+         address='00:11:22:33:44:55',
+         ifname='br-ctrl')
+# add primary IP address
+ipr.addr('add', index=dev,
+         address='10.0.0.1', mask=24,
+         broadcast='10.0.0.255')
+# add secondary IP address
+ipr.addr('add', index=dev,
+         address='10.0.0.2', mask=24,
+         broadcast='10.0.0.255')
+# bring it up
+ipr.link('set', index=dev, state='up')
+
+```
+
+addr(command, index=None, address=None, mask=None, family=None, scope=None, match=None, **kwarg)¶
+
+Address operations
+
+- command – add, delete
+- index – device index
+- address – IPv4 or IPv6 address
+- mask – address mask
+- family – socket.AF_INET for IPv4 or socket.AF_INET6 for IPv6
+- scope – the address scope, see /etc/iproute2/rt_scopes
+- **kwarg – any ifaddrmsg field or NLA
+
+Later the method signature will be changed to:
+
+```
+def addr(self, command, match=None, **kwarg):
+    # the method body
+
+```
+
+So only keyword arguments (except of the command) will be accepted. The reason for this change is an unification of API.
+
+Example:
+
+```
+idx = 62
+ip.addr('add', index=idx, address='10.0.0.1', mask=24)
+ip.addr('add', index=idx, address='10.0.0.2', mask=24)
+
+```
+
+With more NLAs:
+
+```
+# explicitly set broadcast address
+ip.addr('add', index=idx,
+        address='10.0.0.3',
+        broadcast='10.0.0.255',
+        prefixlen=24)
+
+# make the secondary address visible to ifconfig: add label
+ip.addr('add', index=idx,
+        address='10.0.0.4',
+        broadcast='10.0.0.255',
+        prefixlen=24,
+        label='eth0:1')
+
+```
+
+Configure p2p address on an interface:
+
+```
+ip.addr('add', index=idx,
+        address='10.1.1.2',
+        mask=24,
+        local='10.1.1.1')
+
+```
+
+fdb(command, **kwarg)¶
+
+Bridge forwarding database management.
+
+More details:
+
+- kernel:Documentation/networking/switchdev.txt
+- pyroute2.netlink.rtnl.ndmsg
+
+add
+
+Add a new FDB record. Works in the same way as ARP cache management, but some additional NLAs can be used:
+
+```
+# simple FDB record
+#
+ip.fdb('add',
+       ifindex=ip.link_lookup(ifname='br0')[0],
+       lladdr='00:11:22:33:44:55',
+       dst='10.0.0.1')
+
+# specify vlan
+# NB: vlan should exist on the device, use
+# `vlan_filter()`
+#
+ip.fdb('add',
+       ifindex=ip.link_lookup(ifname='br0')[0],
+       lladdr='00:11:22:33:44:55',
+       dst='10.0.0.1',
+       vlan=200)
+
+# specify vxlan id and port
+# NB: works only for vxlan devices, use
+# `link("add", kind="vxlan", ...)`
+#
+# if port is not specified, the default one is used
+# by the kernel.
+#
+# if vni (vxlan id) is equal to the device vni,
+# the kernel doesn't report it back
+#
+ip.fdb('add',
+       ifindex=ip.link_lookup(ifname='vx500')[0]
+       lladdr='00:11:22:33:44:55',
+       dst='10.0.0.1',
+       port=5678,
+       vni=600)
+
+```
+
+append
+
+Append a new FDB record. The same syntax as for add.
+
+del
+
+Remove an existing FDB record. The same syntax as for add.
+
+dump
+
+Dump all the FDB records. If any **kwarg is provided, results will be filtered:
+
+```
+# dump all the records
+ip.fdb('dump')
+
+# show only specific lladdr, dst, vlan etc.
+ip.fdb('dump', lladdr='00:11:22:33:44:55')
+ip.fdb('dump', dst='10.0.0.1')
+ip.fdb('dump', vlan=200)
+
+```
+
+flush_addr(*argv, **kwarg)¶
+
+Flush IP addresses.
+
+Examples:
+
+```
+# flush all addresses on the interface with index 2:
+ipr.flush_addr(index=2)
+
+# flush all addresses with IFA_LABEL='eth0':
+ipr.flush_addr(label='eth0')
+
+```
+
+flush_routes(*argv, **kwarg)¶
+
+Flush routes – purge route records from a table. Arguments are the same as for get_routes() routine. Actually, this routine implements a pipe from get_routes() to nlm_request().
+
+flush_rules(*argv, **kwarg)¶
+
+Flush rules. Please keep in mind, that by default the function operates on all rules of all families. To work only on IPv4 rules, one should explicitly specify family=AF_INET.
+
+Examples:
+
+```
+# flush all IPv4 rule with priorities above 5 and below 32000
+ipr.flush_rules(family=AF_INET, priority=lambda x: 5 < x < 32000)
+
+# flush all IPv6 rules that point to table 250:
+ipr.flush_rules(family=socket.AF_INET6, table=250)
+
+```
+
+get_addr(family=0, match=None, **kwarg)¶
+
+Dump addresses.
+
+If family is not specified, both AF_INET and AF_INET6 addresses will be dumped:
+
+```
+# get all addresses
+ip.get_addr()
+
+```
+
+It is possible to apply filters on the results:
+
+```
+# get addresses for the 2nd interface
+ip.get_addr(index=2)
+
+# get addresses with IFA_LABEL == 'eth0'
+ip.get_addr(label='eth0')
+
+# get all the subnet addresses on the interface, identified
+# by broadcast address (should be explicitly specified upon
+# creation)
+ip.get_addr(index=2, broadcast='192.168.1.255')
+
+```
+
+A custom predicate can be used as a filter:
+
+```
+ip.get_addr(match=lambda x: x['index'] == 1)
+
+```
+
+get_classes(index=0)¶
+
+Get classes for specified interface.
+
+get_default_routes(family=0, table=254)¶
+
+Get default routes
+
+get_filters(index=0, handle=0, parent=0)¶
+
+Get filters for specified interface, handle and parent.
+
+get_links(*argv, **kwarg)¶
+
+Get network interfaces.
+
+By default returns all interfaces. Arguments vector can contain interface indices or a special keyword ‘all’:
+
+```
+ip.get_links()
+ip.get_links('all')
+ip.get_links(1, 2, 3)
+
+interfaces = [1, 2, 3]
+ip.get_links(*interfaces)
+
+```
+
+get_neighbors(family=0)¶
+
+Alias of get_neighbours(), deprecated.
+
+get_neighbours(family=0, match=None, **kwarg)¶
+
+Dump ARP cache records.
+
+The family keyword sets the family for the request: e.g. AF_INET or AF_INET6 for arp cache, AF_BRIDGE for fdb.
+
+If other keyword arguments not empty, they are used as filter. Also, one can explicitly set filter as a function with the match parameter.
+
+Examples:
+
+```
+# get neighbours on the 3rd link:
+ip.get_neighbours(ifindex=3)
+
+# get a particular record by dst:
+ip.get_neighbours(dst='172.16.0.1')
+
+# get fdb records:
+ip.get_neighbours(AF_BRIDGE)
+
+# and filter them by a function:
+ip.get_neighbours(AF_BRIDGE, match=lambda x: x['state'] == 2)
+
+```
+
+get_ntables(family=0)¶
+
+Get neighbour tables
+
+get_qdiscs(index=None)¶
+
+Get all queue disciplines for all interfaces or for specified one.
+
+get_routes(family=0, match=None, **kwarg)¶
+
+Get all routes. You can specify the table. There are 255 routing classes (tables), and the kernel returns all the routes on each request. So the routine filters routes from full output.
+
+Example:
+
+```
+ip.get_routes()  # get all the routes for all families
+ip.get_routes(family=AF_INET6)  # get only IPv6 routes
+ip.get_routes(table=254)  # get routes from 254 table
+
+```
+
+get_rules(family=0, match=None, **kwarg)¶
+
+Get all rules. By default return all rules. To explicitly request the IPv4 rules use family=AF_INET.
+
+Example:: ip.get_rules() # get all the rules for all families ip.get_rules(family=AF_INET6) # get only IPv6 rules get_vlans()¶
+
+Dump available vlan info on bridge ports
+
+link(command, **kwarg)¶
+
+Link operations.
+
+Keywords to set up ifinfmsg fields:
+
+- index – interface index
+- family – AF_BRIDGE for bridge operations, otherwise 0
+- flags – device flags
+- change – change mask
+
+All other keywords will be translated to NLA names, e.g. mtu -> IFLA_MTU, af_spec -> IFLA_AF_SPEC etc. You can provide a complete NLA structure or let filters do it for you. E.g., these pairs show equal statements:
+
+```
+# set device MTU
+ip.link("set", index=x, mtu=1000)
+ip.link("set", index=x, IFLA_MTU=1000)
+
+# add vlan device
+ip.link("add", ifname="test", kind="dummy")
+ip.link("add", ifname="test",
+        IFLA_LINKINFO={'attrs': [['IFLA_INFO_KIND', 'dummy']]})
+
+```
+
+Filters are implemented in the pyroute2.netlink.rtnl.req module. You can contribute your own if you miss shortcuts.
+
+Commands:
+
+add
+
+To create an interface, one should specify the interface kind:
+
+```
+ip.link("add",
+        ifname="test",
+        kind="dummy")
+
+```
+
+The kind can be any of those supported by kernel. It can be dummy, bridge, bond etc. On modern kernels one can specify even interface index:
+
+```
+ip.link("add",
+        ifname="br-test",
+        kind="bridge",
+        index=2345)
+
+```
+
+Specific type notes:
+
+► gre
+
+Create GRE tunnel:
+
+```
+ip.link("add",
+        ifname="grex",
+        kind="gre",
+        gre_local="172.16.0.1",
+        gre_remote="172.16.0.101",
+        gre_ttl=16)
+
+```
+
+The keyed GRE requires explicit iflags/oflags specification:
+
+```
+ip.link("add",
+        ifname="grex",
+        kind="gre",
+        gre_local="172.16.0.1",
+        gre_remote="172.16.0.101",
+        gre_ttl=16,
+        gre_ikey=10,
+        gre_okey=10,
+        gre_iflags=32,
+        gre_oflags=32)
+
+```
+
+► macvlan
+
+Macvlan interfaces act like VLANs within OS. The macvlan driver provides an ability to add several MAC addresses on one interface, where every MAC address is reflected with a virtual interface in the system.
+
+In some setups macvlan interfaces can replace bridge interfaces, providing more simple and at the same time high-performance solution:
+
+```
+ip.link("add",
+        ifname="mvlan0",
+        kind="macvlan",
+        link=ip.link_lookup(ifname="em1")[0],
+        macvlan_mode="private").commit()
+
+```
+
+Several macvlan modes are available: “private”, “vepa”, “bridge”, “passthru”. Ususally the default is “vepa”.
+
+► macvtap
+
+Almost the same as macvlan, but creates also a character tap device:
+
+```
+ip.link("add",
+        ifname="mvtap0",
+        kind="macvtap",
+        link=ip.link_lookup(ifname="em1")[0],
+        macvtap_mode="vepa").commit()
+
+```
+
+Will create a device file “/dev/tap%s” % index
+
+► tuntap
+
+Possible tuntap keywords:
+
+- mode — “tun” or “tap”
+- uid — integer
+- gid — integer
+- ifr — dict of tuntap flags (see ifinfmsg:... tuntap_data)
+
+Create a tap interface:
+
+```
+ip.link("add",
+        ifname="tap0",
+        kind="tuntap",
+        mode="tap")
+
+```
+
+Tun/tap interfaces are created using ioctl(), but the library provides a transparent way to manage them using netlink API.
+
+► veth
+
+To properly create veth interface, one should specify peer also, since veth interfaces are created in pairs:
+
+```
+ip.link("add", ifname="v1p0", kind="veth", peer="v1p1")
+
+```
+
+► vlan
+
+VLAN interfaces require additional parameters, vlan_id and link, where link is a master interface to create VLAN on:
+
+```
+ip.link("add",
+        ifname="v100",
+        kind="vlan",
+        link=ip.link_lookup(ifname="eth0")[0],
+        vlan_id=100)
+
+```
+
+► vrf
+
+VRF interfaces (see linux/Documentation/networking/vrf.txt):
+
+```
+ip.link("add",
+        ifname="vrf-foo",
+        kind="vrf",
+        vrf_table=42)
+
+```
+
+► vxlan
+
+VXLAN interfaces are like VLAN ones, but require a bit more parameters:
+
+```
+ip.link("add",
+        ifname="vx101",
+        kind="vxlan",
+        vxlan_link=ip.link_lookup(ifname="eth0")[0],
+        vxlan_id=101,
+        vxlan_group='239.1.1.1',
+        vxlan_ttl=16)
+
+```
+
+All possible vxlan parameters are listed in the module pyroute2.netlink.rtnl.ifinfmsg:... vxlan_data.
+
+set
+
+Set interface attributes:
+
+```
+# get interface index
+x = ip.link_lookup(ifname="eth0")[0]
+# put link down
+ip.link("set", index=x, state="down")
+# rename and set MAC addr
+ip.link("set", index=x, address="00:11:22:33:44:55", name="bala")
+# set MTU and TX queue length
+ip.link("set", index=x, mtu=1000, txqlen=2000)
+# bring link up
+ip.link("set", index=x, state="up")
+
+```
+
+Keyword “state” is reserved. State can be “up” or “down”, it is a shortcut:
+
+```
+state="up":   flags=1, mask=1
+state="down": flags=0, mask=0
+
+```
+
+del
+
+Destroy the interface:
+
+```
+ip.link("del", index=ip.link_lookup(ifname="dummy0")[0])
+
+```
+
+dump
+
+Dump info for all interfaces
+
+get
+
+Get specific interface info:
+
+```
+ip.link("get", index=ip.link_lookup(ifname="br0")[0])
+
+```
+
+vlan-add vlan-del
+
+These command names are confusing and thus are deprecated. Use IPRoute.vlan_filter().
+
+link_lookup(**kwarg)¶
+
+Lookup interface index (indeces) by first level NLA value.
+
+Example:
+
+```
+ip.link_lookup(address="52:54:00:9d:4e:3d")
+ip.link_lookup(ifname="lo")
+ip.link_lookup(operstate="UP")
+
+```
+
+Please note, that link_lookup() returns list, not one value.
+
+neigh(command, **kwarg)¶
+
+Neighbours operations, same as ip neigh or bridge fdb
+
+add
+
+Add a neighbour record, e.g.:
+
+```
+# add a permanent record on veth0
+idx = ip.link_lookup(ifname='veth0')[0]
+ip.neigh('add',
+         dst='172.16.45.1',
+         lladdr='00:11:22:33:44:55',
+         ifindex=ip.link_lookup(ifname='veth0')[0]
+         state=ndmsg.states['permanent'])
+
+```
+
+set
+
+Set an existing record or create a new one, if it doesn’t exist.
+
+change
+
+Change an existing record or fail, if it doesn’t exist.
+
+del
+
+Delete an existing record.
+
+dump
+
+Dump all the records in the NDB.
+
+route(command, **kwarg)¶
+
+Route operations.
+
+Keywords to set up rtmsg fields:
+
+- dst_len, src_len – destination and source mask(see dst below)
+- tos – type of service
+- table – routing table
+- proto – redirect, boot, static (see rt_proto)
+- scope – routing realm
+- type – unicast, local, etc. (see rt_type)
+
+pyroute2/netlink/rtnl/rtmsg.py rtmsg.nla_map:
+
+- table – routing table to use (default: 254)
+- gateway – via address
+- prefsrc – preferred source IP address
+- dst – the same as prefix
+- src – source address
+- iif – incoming traffic interface
+- oif – outgoing traffic interface
+
+etc.
+
+One can specify mask not as dst_len, but as a part of dst, e.g.: dst=”10.0.0.0/24”.
+
+Commands:
+
+add
+
+Example:
+
+```
+ip.route("add", dst="10.0.0.0/24", gateway="192.168.0.1")
+
+```
+
+It is possible to set also route metrics. There are two ways to do so. The first is to use ‘raw’ NLA notation:
+
+```
+ip.route("add",
+         dst="10.0.0.0",
+         mask=24,
+         gateway="192.168.0.1",
+         metrics={"attrs": [["RTAX_MTU", 1400],
+                            ["RTAX_HOPLIMIT", 16]]})
+
+```
+
+The second way is to use shortcuts, provided by IPRouteRequest class, which is applied to **kwarg automatically:
+
+```
+ip.route("add",
+         dst="10.0.0.0/24",
+         gateway="192.168.0.1",
+         metrics={"mtu": 1400,
+                  "hoplimit": 16})
+
+```
+
+...
+
+More route() examples. Multipath route:
+
+```
+ip.route("add",
+         dst="10.0.0.0/24",
+         multipath=[{"gateway": "192.168.0.1", "hops": 2},
+                    {"gateway": "192.168.0.2", "hops": 1},
+                    {"gateway": "192.168.0.3"}])
+
+```
+
+MPLS lwtunnel on eth0:
+
+```
+idx = ip.link_lookup(ifname='eth0')[0]
+ip.route("add",
+         dst="10.0.0.0/24",
+         oif=idx,
+         encap={"type": "mpls",
+                "labels": "200/300"})
+
+```
+
+MPLS multipath:
+
+```
+idx = ip.link_lookup(ifname='eth0')[0]
+ip.route("add",
+         dst="10.0.0.0/24",
+         table=20,
+         multipath=[{"gateway": "192.168.0.1",
+                     "encap": {"type": "mpls",
+                               "labels": 200}},
+                    {"ifindex": idx,
+                     "encap": {"type": "mpls",
+                               "labels": 300}}])
+
+```
+
+MPLS target can be int, string, dict or list:
+
+```
+"labels": 300    # simple label
+"labels": "300"  # the same
+"labels": (200, 300)  # stacked
+"labels": "200/300"   # the same
+
+# explicit label definition
+"labels": {"bos": 1,
+           "label": 300,
+           "tc": 0,
+           "ttl": 16}
+
+```
+
+change, replace
+
+Commands change and replace have the same meanings, as in ip-route(8): change modifies only existing route, while replace creates a new one, if there is no such route yet.
+
+del
+
+Remove the route. The same syntax as for add.
+
+get
+
+Get route by spec.
+
+dump
+
+Dump all routes.
+
+rule(command, *argv, **kwarg)¶
+
+Rule operations
+
+command — add, delete
+
+table — 0 < table id < 253
+
+priority — 0 < rule’s priority < 32766
+
+action — type of rule, default ‘FR_ACT_NOP’ (see fibmsg.py)
+
+rtscope — routing scope, default RT_SCOPE_UNIVERSE
+
+(RT_SCOPE_UNIVERSE|RT_SCOPE_SITE| RT_SCOPE_LINK|RT_SCOPE_HOST|RT_SCOPE_NOWHERE)
+
+family — rule’s family (socket.AF_INET (default) or
+
+socket.AF_INET6)
+
+src — IP source for Source Based (Policy Based) routing’s rule
+
+dst — IP for Destination Based (Policy Based) routing’s rule
+
+src_len — Mask for Source Based (Policy Based) routing’s rule
+
+dst_len — Mask for Destination Based (Policy Based) routing’s
+
+rule
+
+iifname — Input interface for Interface Based (Policy Based)
+
+routing’s rule
+
+oifname — Output interface for Interface Based (Policy Based)
+
+routing’s rule
+
+All packets route via table 10:
+
+```
+# 32000: from all lookup 10
+# ...
+ip.rule('add', table=10, priority=32000)
+
+```
+
+Default action:
+
+```
+# 32001: from all lookup 11 unreachable
+# ...
+iproute.rule('add',
+             table=11,
+             priority=32001,
+             action='FR_ACT_UNREACHABLE')
+
+```
+
+Use source address to choose a routing table:
+
+```
+# 32004: from 10.64.75.141 lookup 14
+# ...
+iproute.rule('add',
+             table=14,
+             priority=32004,
+             src='10.64.75.141')
+
+```
+
+Use dst address to choose a routing table:
+
+```
+# 32005: from 10.64.75.141/24 lookup 15
+# ...
+iproute.rule('add',
+             table=15,
+             priority=32005,
+             dst='10.64.75.141',
+             dst_len=24)
+
+```
+
+Match fwmark:
+
+```
+# 32006: from 10.64.75.141 fwmark 0xa lookup 15
+# ...
+iproute.rule('add',
+             table=15,
+             priority=32006,
+             dst='10.64.75.141',
+             fwmark=10)
+
+```
+
+tc(command, kind=None, index=0, handle=0, **kwarg)¶
+
+“Swiss knife” for traffic control. With the method you can add, delete or modify qdiscs, classes and filters.
+
+- command – add or delete qdisc, class, filter.
+- kind – a string identifier – “sfq”, “htb”, “u32” and so on.
+- handle – integer or string
+
+Command can be one of (“add”, “del”, “add-class”, “del-class”, “add-filter”, “del-filter”) (see commands dict in the code).
+
+Handle notice: traditional iproute2 notation, like “1:0”, actually represents two parts in one four-bytes integer:
+
+```
+1:0    ->    0x10000
+1:1    ->    0x10001
+ff:0   ->   0xff0000
+ffff:1 -> 0xffff0001
+
+```
+
+Target notice: if your target is a class/qdisc that applies an algorithm that can only apply to upstream traffic profile, but your keys variable explicitly references a match that is only relevant for upstream traffic, the kernel will reject the filter. Unless you’re dealing with devices like IMQs
+
+For pyroute2 tc() you can use both forms: integer like 0xffff0000 or string like ‘ffff:0000’. By default, handle is 0, so you can add simple classless queues w/o need to specify handle. Ingress queue causes handle to be 0xffff0000.
+
+So, to set up sfq queue on interface 1, the function call will be like that:
+
+```
+ip = IPRoute()
+ip.tc("add", "sfq", 1)
+
+```
+
+Instead of string commands (“add”, “del”...), you can use also module constants, RTM_NEWQDISC, RTM_DELQDISC and so on:
+
+```
+ip = IPRoute()
+flags = NLM_F_REQUEST | NLM_F_ACK | NLM_F_CREATE | NLM_F_EXCL
+ip.tc((RTM_NEWQDISC, flags), "sfq", 1)
+
+```
+
+Also available “modules” (returns tc plugins dict) and “help” commands:
+
+```
+help(ip.tc("modules")["htb"])
+print(ip.tc("help", "htb"))
+
+```
+
+vlan_filter(command, **kwarg)¶
+
+Vlan filters is another approach to support vlans in Linux. Before vlan filters were introduced, there was only one way to bridge vlans: one had to create vlan interfaces and then add them as ports:
+
+```
+        +------+      +----------+
+net --> | eth0 | <--> | eth0.500 | <---+
+        +------+      +----------+     |
+                                       v
+        +------+                    +-----+
+net --> | eth1 |                    | br0 |
+        +------+                    +-----+
+                                       ^
+        +------+      +----------+     |
+net --> | eth2 | <--> | eth0.500 | <---+
+        +------+      +----------+
+
+```
+
+It means that one has to create as many bridges, as there were vlans. Vlan filters allow to bridge together underlying interfaces and create vlans already on the bridge:
+
+```
+# v500 label shows which interfaces have vlan filter
+
+        +------+ v500
+net --> | eth0 | <-------+
+        +------+         |
+                         v
+        +------+      +-----+    +---------+
+net --> | eth1 | <--> | br0 |<-->| br0v500 |
+        +------+      +-----+    +---------+
+                         ^
+        +------+ v500    |
+net --> | eth2 | <-------+
+        +------+
+
+```
+
+In this example vlan 500 will be allowed only on ports eth0 and eth2, though all three eth nics are bridged.
+
+Some example code:
+
+```
+# create bridge
+ip.link("add",
+        ifname="br0",
+        kind="bridge")
+
+# attach a port
+ip.link("set",
+        index=ip.link_lookup(ifname="eth0")[0],
+        master=ip.link_lookup(ifname="br0")[0])
+
+# set vlan filter
+ip.vlan_filter("add",
+               index=ip.link_lookup(ifname="eth0")[0],
+               vlan_info={"vid": 500})
+
+# create vlan interface on the bridge
+ip.link("add",
+        ifname="br0v500",
+        kind="vlan",
+        link=ip.link_lookup(ifname="br0")[0],
+        vlan_id=500)
+
+# set all UP
+ip.link("set",
+        index=ip.link_lookup(ifname="br0")[0],
+        state="up")
+ip.link("set",
+        index=ip.link_lookup(ifname="br0v500")[0],
+        state="up")
+ip.link("set",
+        index=ip.link_lookup(ifname="eth0")[0],
+        state="up")
+
+# set IP address
+ip.addr("add",
+        index=ip.link_lookup(ifname="br0v500")[0],
+        address="172.16.5.2",
+        mask=24)
+
+Now all the traffic to the network 172.16.5.2/24 will go
+to vlan 500 only via ports that have such vlan filter.
+
+```
+
+Required arguments for vlan_filter() – index and vlan_info. Vlan info struct:
+
+```
+{"vid": uint16,
+ "flags": uint16}
+
+```
+
+More details:
+
+- kernel:Documentation/networking/switchdev.txt
+- pyroute2.netlink.rtnl.ifinfmsg:... vlan_info
+
+One can specify flags as int or as a list of flag names:
+
+- master == 0x1
+- pvid == 0x2
+- untagged == 0x4
+- range_begin == 0x8
+- range_end == 0x10
+- brentry == 0x20
+
+E.g.:
+
+```
+{"vid": 20,
+ "flags": ["pvid", "untagged"]}
+
+# is equal to
+{"vid": 20,
+ "flags": 6}
+
+```
+
+Commands:
+
+add
+
+Add vlan filter to a bridge port. Example:
+
+```
+ip.vlan_filter("add", index=2, vlan_info={"vid": 200})
+
+```
+
+del
+
+Remove vlan filter from a bridge port. Example:
+
+```
+ip.vlan_filter("del", index=2, vlan_info={"vid": 200})
+
+```
+
+class pyroute2.iproute.RawIPRoute(fileno=None)¶
+
+The same as IPRoute, but does not use the netlink proxy. Thus it can not manage e.g. tun/tap interfaces.
+
+## queueing disciplines¶
+
+### drr¶
+
+The qdisc doesn’t accept any parameters, but the class accepts quantum parameter:
+
+```
+ip.tc('add', 'drr', interface, '1:')
+ip.tc('add-class', 'drr', interface, '1:10', quantum=1600)
+ip.tc('add-class', 'drr', interface, '1:20', quantum=1600)
+
+```
+
+### choke¶
+
+Parameters:
+
+- limit (required) – int
+- bandwith (required) – str/int
+- min – int
+- max – int
+- avpkt – str/int, packet size
+- burst – int
+- probability – float
+- ecn – bool
+
+Example:
+
+```
+ip.tc('add', 'choke', interface,
+      limit=5500,
+      bandwith="10mbit",
+      ecn=True)
+
+```
+
+### clsact¶
+
+The clsact qdisc provides a mechanism to attach integrated filter-action classifiers to an interface, either at ingress or egress, or both. The use case shown here is using a bpf program (implemented elsewhere) to direct the packet processing. The example also uses the direct-action feature to specify what to do with each packet (pass, drop, redirect, etc.).
+
+BPF ingress/egress example using clsact qdisc:
+
+```
+# open_bpf_fd is outside the scope of pyroute2
+#fd = open_bpf_fd()
+eth0 = ip.get_links(ifname="eth0")[0]
+ip.tc("add", "clsact", eth0)
+# add ingress clsact
+ip.tc("add-filter", "bpf", idx, ":1", fd=fd, name="myprog",
+      parent="ffff:fff2", classid=1, direct_action=True)
+# add egress clsact
+ip.tc("add-filter", "bpf", idx, ":1", fd=fd, name="myprog",
+      parent="ffff:fff3", classid=1, direct_action=True)
+
+```
+
+### hfsc¶
+
+Simple HFSC example:
+
+```
+eth0 = ip.get_links(ifname="eth0")[0]
+ip.tc("add", "hfsc", eth0,
+      handle="1:",
+      default="1:1")
+ip.tc("add-class", "hfsc", eth0,
+      handle="1:1",
+      parent="1:0"
+      rsc={"m2": "5mbit"})
+
+```
+
+HFSC curve nla types:
+
+- rsc: real-time curve
+- fsc: link-share curve
+- usc: upper-limit curve
+
+### htb¶
+
+TODO: list parameters
+
+An example with htb qdisc, lets assume eth0 == 2:
+
+```
+#          u32 -->    +--> htb 1:10 --> sfq 10:0
+#          |          |
+#          |          |
+# eth0 -- htb 1:0 -- htb 1:1
+#          |          |
+#          |          |
+#          u32 -->    +--> htb 1:20 --> sfq 20:0
+
+eth0 = 2
+# add root queue 1:0
+ip.tc("add", "htb", eth0, 0x10000, default=0x200000)
+
+# root class 1:1
+ip.tc("add-class", "htb", eth0, 0x10001,
+      parent=0x10000,
+      rate="256kbit",
+      burst=1024 * 6)
+
+# two branches: 1:10 and 1:20
+ip.tc("add-class", "htb", eth0, 0x10010,
+      parent=0x10001,
+      rate="192kbit",
+      burst=1024 * 6,
+      prio=1)
+ip.tc("add-class", "htb", eht0, 0x10020,
+      parent=0x10001,
+      rate="128kbit",
+      burst=1024 * 6,
+      prio=2)
+
+# two leaves: 10:0 and 20:0
+ip.tc("add", "sfq", eth0, 0x100000,
+      parent=0x10010,
+      perturb=10)
+ip.tc("add", "sfq", eth0, 0x200000,
+      parent=0x10020,
+      perturb=10)
+
+# two filters: one to load packets into 1:10 and the
+# second to 1:20
+ip.tc("add-filter", "u32", eth0,
+      parent=0x10000,
+      prio=10,
+      protocol=socket.AF_INET,
+      target=0x10010,
+      keys=["0x0006/0x00ff+8", "0x0000/0xffc0+2"])
+ip.tc("add-filter", "u32", eth0,
+      parent=0x10000,
+      prio=10,
+      protocol=socket.AF_INET,
+      target=0x10020,
+      keys=["0x5/0xf+0", "0x10/0xff+33"])
+
+```
+
+## filters¶
+
+### u32¶
+
+Filters can take an action argument, which affects the packet behavior when the filter matches. Currently the gact, bpf, and police action types are supported, and can be attached to the u32 and bpf filter types:
+
+```
+# An action can be a simple string, which translates to a gact type
+action = "drop"
+
+# Or it can be an explicit type (these are equivalent)
+action = dict(kind="gact", action="drop")
+
+# There can also be a chain of actions, which depend on the return
+# value of the previous action.
+action = [
+    dict(kind="bpf", fd=fd, name=name, action="ok"),
+    dict(kind="police", rate="10kbit", burst=10240, limit=0),
+    dict(kind="gact", action="ok"),
+]
+
+# Add the action to a u32 match-all filter
+ip.tc("add", "htb", eth0, 0x10000, default=0x200000)
+ip.tc("add-filter", "u32", eth0,
+      parent=0x10000,
+      prio=10,
+      protocol=protocols.ETH_P_ALL,
+      target=0x10020,
+      keys=["0x0/0x0+0"],
+      action=action)
+
+# Add two more filters: One to send packets with a src address of
+# 192.168.0.1/32 into 1:10 and the second to send packets  with a
+# dst address of 192.168.0.0/24 into 1:20
+ip.tc("add-filter", "u32", eth0,
+    parent=0x10000,
+    prio=10,
+    protocol=socket.AF_INET,
+    target=0x10010,
+    keys=["0xc0a80001/0xffffffff+12"])
+    # 0xc0a800010 = 192.168.0.1
+    # 0xffffffff = 255.255.255.255 (/32)
+    # 12 = Source network field bit offset
+
+ip.tc("add-filter", "u32", eth0,
+    parent=0x10000,
+    prio=10,
+    protocol=socket.AF_INET,
+    target=0x10020,
+    keys=["0xc0a80000/0xffffff00+16"])
+    # 0xc0a80000 = 192.168.0.0
+    # 0xffffff00 = 255.255.255.0 (/24)
+    # 16 = Destination network field bit offset
+
+```
+
+### Table Of Contents
+
+IPRoute module
+
+queueing disciplines
+
+- drr
+- choke
+- clsact
+- hfsc
+- htb
+
+filters
+
+- u32
+
+#### Previous topic
+
+#### Next topic
+
+### This Page
+
+### Quick search
+
+Enter search terms or a module, class or function name.
+
+© Copyright 2013, Peter V. Saveliev. Created using [Sphinx](http://sphinx-doc.org/) 1.2.3.

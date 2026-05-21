@@ -1,0 +1,323 @@
+diff --git a/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/auth.js b/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/auth.js
+index f89657f..45a3398 100644
+--- a/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/auth.js
++++ b/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/auth.js
+@@ -33,6 +33,27 @@ class UnauthorizedError extends Error {
+     }
+ }
+ exports.UnauthorizedError = UnauthorizedError;
++function __cursorIsRetryableOAuthRefreshError(error) {
++    if (!(error instanceof Error)) {
++        return false;
++    }
++    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
++        return true;
++    }
++    const cause = error.cause;
++    const code = error.code ?? (cause && typeof cause === 'object' && 'code' in cause ? cause.code : undefined);
++    if (typeof code === 'string' && /^(EAI_AGAIN|ECONNABORTED|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETDOWN|ENETUNREACH|ENOTFOUND|EPIPE|ETIMEDOUT|EADDRNOTAVAIL)$/.test(code)) {
++        return true;
++    }
++    const msg = (error.message ?? '').toLowerCase();
++    if (/fetch failed|network error|socket hang up|client network socket disconnected|connection (?:timed out|timeout|closed|terminated)/i.test(msg)) {
++        return true;
++    }
++    if (error instanceof errors_js_1.OAuthError && (error instanceof errors_js_1.ServerError || error instanceof errors_js_1.TemporarilyUnavailableError)) {
++        return true;
++    }
++    return false;
++}
+ function isClientAuthMethod(method) {
+     return ['client_secret_basic', 'client_secret_post', 'none'].includes(method);
+ }
+@@ -168,6 +189,9 @@ async function auth(provider, options) {
+         return await authInternal(provider, options);
+     }
+     catch (error) {
++        if (error instanceof Error && error.name === 'OAuthRefreshTransientError') {
++            throw error;
++        }
+         // Handle recoverable error types by invalidating credentials and retrying
+         if (error instanceof errors_js_1.InvalidClientError || error instanceof errors_js_1.UnauthorizedClientError) {
+             await provider.invalidateCredentials?.('all');
+@@ -254,6 +278,8 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+     // Handle token refresh or new authorization
+     if (tokens?.refresh_token) {
+         try {
++            // [CURSOR PATCH] Allow the provider to coordinate concurrent refreshes
++            await provider.prepareForRefresh?.();
+             // Attempt to refresh the token
+             const newTokens = await refreshAuthorization(authorizationServerUrl, {
+                 metadata,
+@@ -267,6 +293,68 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+             return 'AUTHORIZED';
+         }
+         catch (error) {
++            // [CURSOR PATCH] Re-throw SiblingAlreadyRefreshedError so the FSM
++            // can reconnect with the winner's fresh tokens instead of starting
++            // a redundant full re-authorization flow.
++            if (error && error.name === 'SiblingAlreadyRefreshedError') { throw error; }
++            // [CURSOR PATCH] Log the catch-branch decision point before any branch is taken.
++            const __isOAuthError = error instanceof errors_js_1.OAuthError;
++            const __isServerError = error instanceof errors_js_1.ServerError;
++            const __isRetryable = __cursorIsRetryableOAuthRefreshError(error);
++            const __isDefiniteOAuthFailure = __isOAuthError && !__isServerError && !(error instanceof errors_js_1.TemporarilyUnavailableError);
++            const __fallthroughClassification = provider.classifyFallthroughError?.(error instanceof Error ? error.message : String(error)) ?? 'default';
++            const __willRethrow = __isDefiniteOAuthFailure || __isRetryable || __fallthroughClassification === 'retry' || (__fallthroughClassification !== 'pass' && !!provider.shouldBlockRefreshFallthrough);
++            provider.logRefreshCatchBranch?.({
++                errorIsOAuthError: __isOAuthError,
++                errorIsServerError: __isServerError,
++                errorIsRetryable: __isRetryable,
++                willFallThrough: !__willRethrow,
++                willRethrow: __willRethrow,
++                errorName: error instanceof Error ? error.name : typeof error,
++                errorMessage: error instanceof Error ? error.message : String(error),
++            });
++            // [CURSOR PATCH] Release the refresh lease acquired in prepareForRefresh
++            // so sibling providers are not blocked until TTL expiry.
++            await provider.releaseRefreshLeaseOnError?.(error);
++            // Definite OAuth protocol failures (except server_error / temporarily_unavailable below) should surface to callers.
++            if (error instanceof errors_js_1.OAuthError && !(error instanceof errors_js_1.ServerError) && !(error instanceof errors_js_1.TemporarilyUnavailableError)) {
++                throw error;
++            }
++            // Transient network / overload: do not fall through to interactive re-auth.
++            if (__cursorIsRetryableOAuthRefreshError(error)) {
++                const wrapped = new Error(error instanceof Error ? error.message : String(error));
++                wrapped.name = 'OAuthRefreshTransientError';
++                if (error instanceof Error && error.stack) {
++                    wrapped.stack = error.stack;
++                }
++                throw wrapped;
++            }
++            // [CURSOR PATCH] Needle-based + catch-all classification for
++            // unrecognized errors. classifyFallthroughError checks
++            // fallthroughRetryNeedles/fallthroughPassNeedles from the
++            // mcp_oauth_refresh_policy dynamic config.
++            {
++                const __errorMsg = error instanceof Error ? error.message : String(error);
++                const __classification = provider.classifyFallthroughError?.(__errorMsg) ?? 'default';
++                if (__classification === 'retry') {
++                    const wrapped = new Error(__errorMsg);
++                    wrapped.name = 'OAuthRefreshTransientError';
++                    wrapped.cause = error;
++                    if (error instanceof Error && error.stack) {
++                        wrapped.stack = error.stack;
++                    }
++                    throw wrapped;
++                }
++                if (__classification !== 'pass' && !!provider.shouldBlockRefreshFallthrough) {
++                    const wrapped = new Error(__errorMsg);
++                    wrapped.name = 'OAuthRefreshTransientError';
++                    wrapped.cause = error;
++                    if (error instanceof Error && error.stack) {
++                        wrapped.stack = error.stack;
++                    }
++                    throw wrapped;
++                }
++            }
+             // If this is a ServerError, or an unknown type, log it out and try to continue. Otherwise, escalate so we can fix things and retry.
+             if (!(error instanceof errors_js_1.OAuthError) || error instanceof errors_js_1.ServerError) {
+                 // Could not refresh OAuth tokens
+diff --git a/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js b/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js
+index a29a7d3..eea8413 100644
+--- a/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js
++++ b/node_modules/@modelcontextprotocol/sdk/dist/cjs/client/streamableHttp.js
+@@ -153,7 +153,15 @@ class StreamableHTTPClientTransport {
+         this._reconnectionTimeout = setTimeout(() => {
+             // Use the last event ID to resume where we left off
+             this._startOrAuthSse(options).catch(error => {
+-                this.onerror?.(new Error(`Failed to reconnect SSE stream: ${error instanceof Error ? error.message : String(error)}`));
++                if (error instanceof Error && error.name === 'SiblingAlreadyRefreshedError') {
++                    this.onerror?.(error);
++                    return;
++                }
++                const wrapped = new Error(`Failed to reconnect SSE stream: ${error instanceof Error ? error.message : String(error)}`);
++                if (error instanceof Error) {
++                    wrapped.cause = error;
++                }
++                this.onerror?.(wrapped);
+                 // Schedule another attempt if this one failed, incrementing the attempt counter
+                 this._scheduleReconnection(options, attemptCount + 1);
+             });
+@@ -250,7 +258,15 @@ class StreamableHTTPClientTransport {
+                         }, 0);
+                     }
+                     catch (error) {
+-                        this.onerror?.(new Error(`Failed to reconnect: ${error instanceof Error ? error.message : String(error)}`));
++                        if (error instanceof Error && error.name === 'SiblingAlreadyRefreshedError') {
++                            this.onerror?.(error);
++                            return;
++                        }
++                        const wrapped = new Error(`Failed to reconnect: ${error instanceof Error ? error.message : String(error)}`);
++                        if (error instanceof Error) {
++                            wrapped.cause = error;
++                        }
++                        this.onerror?.(wrapped);
+                     }
+                 }
+             }
+diff --git a/node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js b/node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js
+index de86ff9..ff85a7a 100644
+--- a/node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js
++++ b/node_modules/@modelcontextprotocol/sdk/dist/esm/client/auth.js
+@@ -3,12 +3,33 @@ import { LATEST_PROTOCOL_VERSION } from '../types.js';
+ import { OAuthErrorResponseSchema, OpenIdProviderDiscoveryMetadataSchema } from '../shared/auth.js';
+ import { OAuthClientInformationFullSchema, OAuthMetadataSchema, OAuthProtectedResourceMetadataSchema, OAuthTokensSchema } from '../shared/auth.js';
+ import { checkResourceAllowed, resourceUrlFromServerUrl } from '../shared/auth-utils.js';
+-import { InvalidClientError, InvalidClientMetadataError, InvalidGrantError, OAUTH_ERRORS, OAuthError, ServerError, UnauthorizedClientError } from '../server/auth/errors.js';
++import { InvalidClientError, InvalidClientMetadataError, InvalidGrantError, OAUTH_ERRORS, OAuthError, ServerError, TemporarilyUnavailableError, UnauthorizedClientError } from '../server/auth/errors.js';
+ export class UnauthorizedError extends Error {
+     constructor(message) {
+         super(message ?? 'Unauthorized');
+     }
+ }
++function __cursorIsRetryableOAuthRefreshError(error) {
++    if (!(error instanceof Error)) {
++        return false;
++    }
++    if (error.name === 'AbortError' || error.name === 'TimeoutError') {
++        return true;
++    }
++    const cause = error.cause;
++    const code = error.code ?? (cause && typeof cause === 'object' && 'code' in cause ? cause.code : undefined);
++    if (typeof code === 'string' && /^(EAI_AGAIN|ECONNABORTED|ECONNREFUSED|ECONNRESET|EHOSTUNREACH|ENETDOWN|ENETUNREACH|ENOTFOUND|EPIPE|ETIMEDOUT|EADDRNOTAVAIL)$/.test(code)) {
++        return true;
++    }
++    const msg = (error.message ?? '').toLowerCase();
++    if (/fetch failed|network error|socket hang up|client network socket disconnected|connection (?:timed out|timeout|closed|terminated)/i.test(msg)) {
++        return true;
++    }
++    if (error instanceof OAuthError && (error instanceof ServerError || error instanceof TemporarilyUnavailableError)) {
++        return true;
++    }
++    return false;
++}
+ function isClientAuthMethod(method) {
+     return ['client_secret_basic', 'client_secret_post', 'none'].includes(method);
+ }
+@@ -144,6 +165,9 @@ export async function auth(provider, options) {
+         return await authInternal(provider, options);
+     }
+     catch (error) {
++        if (error instanceof Error && error.name === 'OAuthRefreshTransientError') {
++            throw error;
++        }
+         // Handle recoverable error types by invalidating credentials and retrying
+         if (error instanceof InvalidClientError || error instanceof UnauthorizedClientError) {
+             await provider.invalidateCredentials?.('all');
+@@ -230,6 +254,8 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+     // Handle token refresh or new authorization
+     if (tokens?.refresh_token) {
+         try {
++            // [CURSOR PATCH] Allow the provider to coordinate concurrent refreshes
++            await provider.prepareForRefresh?.();
+             // Attempt to refresh the token
+             const newTokens = await refreshAuthorization(authorizationServerUrl, {
+                 metadata,
+@@ -243,6 +269,68 @@ async function authInternal(provider, { serverUrl, authorizationCode, scope, res
+             return 'AUTHORIZED';
+         }
+         catch (error) {
++            // [CURSOR PATCH] Re-throw SiblingAlreadyRefreshedError so the FSM
++            // can reconnect with the winner's fresh tokens instead of starting
++            // a redundant full re-authorization flow.
++            if (error && error.name === 'SiblingAlreadyRefreshedError') { throw error; }
++            // [CURSOR PATCH] Log the catch-branch decision point before any branch is taken.
++            const __isOAuthError = error instanceof OAuthError;
++            const __isServerError = error instanceof ServerError;
++            const __isRetryable = __cursorIsRetryableOAuthRefreshError(error);
++            const __isDefiniteOAuthFailure = __isOAuthError && !__isServerError && !(error instanceof TemporarilyUnavailableError);
++            const __fallthroughClassification = provider.classifyFallthroughError?.(error instanceof Error ? error.message : String(error)) ?? 'default';
++            const __willRethrow = __isDefiniteOAuthFailure || __isRetryable || __fallthroughClassification === 'retry' || (__fallthroughClassification !== 'pass' && !!provider.shouldBlockRefreshFallthrough);
++            provider.logRefreshCatchBranch?.({
++                errorIsOAuthError: __isOAuthError,
++                errorIsServerError: __isServerError,
++                errorIsRetryable: __isRetryable,
++                willFallThrough: !__willRethrow,
++                willRethrow: __willRethrow,
++                errorName: error instanceof Error ? error.name : typeof error,
++                errorMessage: error instanceof Error ? error.message : String(error),
++            });
++            // [CURSOR PATCH] Release the refresh lease acquired in prepareForRefresh
++            // so sibling providers are not blocked until TTL expiry.
++            await provider.releaseRefreshLeaseOnError?.(error);
++            // Definite OAuth protocol failures (except server_error / temporarily_unavailable below) should surface to callers.
++            if (error instanceof OAuthError && !(error instanceof ServerError) && !(error instanceof TemporarilyUnavailableError)) {
++                throw error;
++            }
++            // Transient network / overload: do not fall through to interactive re-auth.
++            if (__cursorIsRetryableOAuthRefreshError(error)) {
++                const wrapped = new Error(error instanceof Error ? error.message : String(error));
++                wrapped.name = 'OAuthRefreshTransientError';
++                if (error instanceof Error && error.stack) {
++                    wrapped.stack = error.stack;
++                }
++                throw wrapped;
++            }
++            // [CURSOR PATCH] Needle-based + catch-all classification for
++            // unrecognized errors. classifyFallthroughError checks
++            // fallthroughRetryNeedles/fallthroughPassNeedles from the
++            // mcp_oauth_refresh_policy dynamic config.
++            {
++                const __errorMsg = error instanceof Error ? error.message : String(error);
++                const __classification = provider.classifyFallthroughError?.(__errorMsg) ?? 'default';
++                if (__classification === 'retry') {
++                    const wrapped = new Error(__errorMsg);
++                    wrapped.name = 'OAuthRefreshTransientError';
++                    wrapped.cause = error;
++                    if (error instanceof Error && error.stack) {
++                        wrapped.stack = error.stack;
++                    }
++                    throw wrapped;
++                }
++                if (__classification !== 'pass' && !!provider.shouldBlockRefreshFallthrough) {
++                    const wrapped = new Error(__errorMsg);
++                    wrapped.name = 'OAuthRefreshTransientError';
++                    wrapped.cause = error;
++                    if (error instanceof Error && error.stack) {
++                        wrapped.stack = error.stack;
++                    }
++                    throw wrapped;
++                }
++            }
+             // If this is a ServerError, or an unknown type, log it out and try to continue. Otherwise, escalate so we can fix things and retry.
+             if (!(error instanceof OAuthError) || error instanceof ServerError) {
+                 // Could not refresh OAuth tokens
+diff --git a/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js b/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js
+index 624172a..369f450 100644
+--- a/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js
++++ b/node_modules/@modelcontextprotocol/sdk/dist/esm/client/streamableHttp.js
+@@ -149,7 +149,15 @@ export class StreamableHTTPClientTransport {
+         this._reconnectionTimeout = setTimeout(() => {
+             // Use the last event ID to resume where we left off
+             this._startOrAuthSse(options).catch(error => {
+-                this.onerror?.(new Error(`Failed to reconnect SSE stream: ${error instanceof Error ? error.message : String(error)}`));
++                if (error instanceof Error && error.name === 'SiblingAlreadyRefreshedError') {
++                    this.onerror?.(error);
++                    return;
++                }
++                const wrapped = new Error(`Failed to reconnect SSE stream: ${error instanceof Error ? error.message : String(error)}`);
++                if (error instanceof Error) {
++                    wrapped.cause = error;
++                }
++                this.onerror?.(wrapped);
+                 // Schedule another attempt if this one failed, incrementing the attempt counter
+                 this._scheduleReconnection(options, attemptCount + 1);
+             });
+@@ -246,7 +254,15 @@ export class StreamableHTTPClientTransport {
+                         }, 0);
+                     }
+                     catch (error) {
+-                        this.onerror?.(new Error(`Failed to reconnect: ${error instanceof Error ? error.message : String(error)}`));
++                        if (error instanceof Error && error.name === 'SiblingAlreadyRefreshedError') {
++                            this.onerror?.(error);
++                            return;
++                        }
++                        const wrapped = new Error(`Failed to reconnect: ${error instanceof Error ? error.message : String(error)}`);
++                        if (error instanceof Error) {
++                            wrapped.cause = error;
++                        }
++                        this.onerror?.(wrapped);
+                     }
+                 }
+             }

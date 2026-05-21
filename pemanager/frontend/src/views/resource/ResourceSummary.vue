@@ -1,0 +1,73 @@
+<script setup>
+import { onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Coin } from '@element-plus/icons-vue'
+import { resourceApi } from '../../api/resourceApi'
+import PageHeader from '../../components/PageHeader.vue'
+
+const loading = ref(false)
+const data = ref(null)
+
+async function load() {
+  loading.value = true
+  try {
+    const { data: d } = await resourceApi.summary()
+    data.value = d
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+onMounted(load)
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader title="资源概览" description="IP 与带宽资源占用情况" :icon="Coin">
+      <template #actions>
+        <el-button type="primary" :loading="loading" @click="load">刷新</el-button>
+      </template>
+    </PageHeader>
+    <el-skeleton v-if="loading && !data" :rows="6" animated />
+    <template v-else-if="data">
+      <el-row :gutter="16">
+        <el-col :xs="24" :md="12">
+          <el-card shadow="never">
+            <template #header>IP 地址（按状态）</template>
+            <el-descriptions :column="1" border>
+              <el-descriptions-item
+                v-for="(c, k) in data.ip_by_state || {}"
+                :key="k"
+                :label="String(k)"
+              >
+                {{ c }}
+              </el-descriptions-item>
+            </el-descriptions>
+            <el-empty v-if="!Object.keys(data.ip_by_state || {}).length" description="暂无数据" />
+          </el-card>
+        </el-col>
+        <el-col :xs="24" :md="12">
+          <el-card shadow="never">
+            <template #header>带宽池</template>
+            <el-table :data="data.bandwidth_pools || []" size="small" border>
+              <el-table-column prop="name" label="池名称" />
+              <el-table-column prop="total_mbps" label="总(Mbps)" width="110" />
+              <el-table-column prop="allocated_mbps" label="已分配" width="100" />
+              <el-table-column prop="remaining_mbps" label="剩余" width="100" />
+            </el-table>
+            <el-empty v-if="!(data.bandwidth_pools || []).length" description="暂无带宽池" />
+          </el-card>
+        </el-col>
+      </el-row>
+    </template>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+}
+</style>
