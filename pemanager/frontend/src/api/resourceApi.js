@@ -21,7 +21,11 @@ export const resourceApi = {
   deleteIp: (id) => http.delete(`/api/resourcemanage/ip-addresses/${id}/`),
   reserveIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/reserve/', payload),
   allocateIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/allocate/', payload),
+  allocateIpWithRoute: (payload) =>
+    http.post('/api/resourcemanage/ip-addresses/actions/allocate-with-route/', payload),
   releaseIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/release/', payload),
+  recycleIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/recycle/', payload),
+  restoreIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/restore/', payload),
 
   listPools: () => http.get('/api/resourcemanage/bandwidth-pools/').then((r) => unwrapList(r.data)),
   createPool: (payload) => http.post('/api/resourcemanage/bandwidth-pools/', payload),
@@ -40,5 +44,4 @@ export const resourceApi = {
     http.post('/api/resourcemanage/bandwidth-allocations/actions/delete-by-key/', payload),
 
   listLogs: () => http.get('/api/resourcemanage/allocation-logs/').then((r) => unwrapList(r.data)),
-  inboundSync: (payload) => http.post('/api/resourcemanage/sync/inbound/', payload),
 }

@@ -1,0 +1,37 @@
+2026-05-19 16:20:07.595 [info] [main] 日志级别: Info
+2026-05-19 16:20:07.595 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-19 16:20:07.622 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-19 16:20:07.622 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-19 16:20:07.743 [info] > git rev-parse --show-toplevel [25ms] (getRepositoryRoot)
+2026-05-19 16:20:07.774 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [19ms] 
+2026-05-19 16:20:07.793 [info] [Model][openRepository] Opened repository: /root
+2026-05-19 16:20:07.793 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-19 16:20:07.810 [info] > git config --get commit.template [7ms] 
+2026-05-19 16:20:07.811 [info] > git rev-parse --show-toplevel [2ms] (getRepositoryRoot)
+2026-05-19 16:20:07.811 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-19 16:20:07.829 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [10ms] 
+2026-05-19 16:20:07.847 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [3ms] 
+2026-05-19 16:20:09.440 [info] > git check-ignore -v -z --stdin [86ms]
+2026-05-19 16:20:09.669 [info] > git show --textconv :pemanager/backend/operationmanage/services/rollup.py [32ms]
+2026-05-19 16:20:09.685 [info] > git ls-files --stage -- pemanager/backend/operationmanage/services/rollup.py [41ms] 
+2026-05-19 16:20:09.695 [info] > git cat-file -s 8d6844617fb94e72c8bc316e9646b787c233018c [3ms] 
+2026-05-19 16:20:09.946 [info] > git check-ignore -v -z --stdin [82ms]
+2026-05-19 16:20:14.965 [info] > git status -z -uall [7127ms] (cancelled)
+2026-05-19 16:20:14.965 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3450ms] 
+2026-05-19 16:20:15.014 [info] > git config --get --local branch.main.vscode-merge-base [39ms] 
+2026-05-19 16:20:15.014 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-19 16:20:15.022 [info] > git config --get commit.template [85ms] 
+2026-05-19 16:20:15.031 [info] > git reflog main --grep-reflog=branch: Created from *. [10ms] 
+2026-05-19 16:20:15.039 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [9ms] 
+2026-05-19 16:20:15.040 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [2ms] 
+2026-05-19 16:20:15.040 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-19 16:20:15.040 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-19 16:20:15.069 [info] > git merge-base refs/heads/main refs/remotes/origin/main [20ms] 
+2026-05-19 16:20:15.078 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [10ms] 
+2026-05-19 16:20:15.080 [info] > git diff --name-status -z --diff-filter=ADMR c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532...refs/remotes/origin/main [3ms] 
+2026-05-19 16:20:15.492 [info] > git check-ignore -v -z --stdin [28ms]
+2026-05-19 16:20:19.955 [info] > git status -z -uall [4895ms] (cancelled)
+2026-05-19 16:20:19.968 [info] > git config --global user.name [6ms] 
+2026-05-19 16:20:19.976 [info] > git config --global user.email [2ms] 
+2026-05-19 16:20:19.976 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-19 16:20:41.139 [info] > git check-ignore -v -z --stdin [26ms]

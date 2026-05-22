@@ -1,0 +1,62 @@
+2026-05-21 01:01:17.510 [info] [main] 日志级别: Info
+2026-05-21 01:01:17.510 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-21 01:01:17.583 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-21 01:01:17.583 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-21 01:01:17.771 [info] > git rev-parse --show-toplevel [42ms] (getRepositoryRoot)
+2026-05-21 01:01:17.811 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [26ms] 
+2026-05-21 01:01:17.832 [info] [Model][openRepository] Opened repository: /root
+2026-05-21 01:01:17.832 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-21 01:01:18.753 [info] > git rev-parse --show-toplevel [901ms] (getRepositoryRoot)
+2026-05-21 01:01:18.753 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-21 01:01:18.755 [info] > git config --get commit.template [907ms] 
+2026-05-21 01:01:18.853 [info] > git check-ignore -v -z --stdin [131ms]
+2026-05-21 01:01:18.855 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [64ms] 
+2026-05-21 01:01:18.882 [info] > git show --textconv :pemanager/frontend/src/views/route/RouteStatic.vue [41ms]
+2026-05-21 01:01:18.890 [info] > git ls-files --stage -- pemanager/frontend/src/views/route/RouteStatic.vue [40ms] 
+2026-05-21 01:01:18.941 [info] > git hash-object -t tree /dev/null [45ms] 
+2026-05-21 01:01:18.941 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 01:01:18.981 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [64ms] 
+2026-05-21 01:01:18.983 [info] > git hash-object -t tree /dev/null [80ms] 
+2026-05-21 01:01:18.983 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 01:01:19.412 [info] > git check-ignore -v -z --stdin [160ms]
+2026-05-21 01:01:24.656 [info] > git status -z -uall [5746ms] (cancelled)
+2026-05-21 01:01:24.657 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3492ms] 
+2026-05-21 01:01:24.731 [info] > git config --get --local branch.main.vscode-merge-base [65ms] 
+2026-05-21 01:01:24.731 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-21 01:01:24.743 [info] > git config --get commit.template [110ms] 
+2026-05-21 01:01:24.748 [info] > git reflog main --grep-reflog=branch: Created from *. [6ms] 
+2026-05-21 01:01:24.771 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [13ms] 
+2026-05-21 01:01:24.771 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-21 01:01:24.771 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-21 01:01:24.783 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [15ms] 
+2026-05-21 01:01:24.784 [info] > git merge-base refs/heads/main refs/remotes/origin/main [3ms] 
+2026-05-21 01:01:24.819 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [5ms] 
+2026-05-21 01:01:24.820 [info] > git diff --name-status -z --diff-filter=ADMR c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532...refs/remotes/origin/main [27ms] 
+2026-05-21 01:01:30.031 [info] > git status -z -uall [5229ms] (cancelled)
+2026-05-21 01:01:30.042 [info] > git config --global user.name [2ms] 
+2026-05-21 01:01:30.049 [info] > git config --global user.email [1ms] 
+2026-05-21 01:01:30.049 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-21 01:01:33.350 [info] > git check-ignore -v -z --stdin [41ms]
+2026-05-21 01:01:59.958 [info] > git check-ignore -v -z --stdin [27ms]
+2026-05-21 01:31:02.137 [info] > git check-ignore -v -z --stdin [44ms]
+2026-05-21 01:31:02.767 [info] > git check-ignore -v -z --stdin [36ms]
+2026-05-21 02:12:09.638 [info] > git check-ignore -v -z --stdin [38ms]
+2026-05-21 02:12:14.382 [info] > git check-ignore -v -z --stdin [73ms]
+2026-05-21 02:12:16.939 [info] > git check-ignore -v -z --stdin [52ms]
+2026-05-21 02:19:57.596 [info] > git check-ignore -v -z --stdin [54ms]
+2026-05-21 02:20:00.635 [info] > git check-ignore -v -z --stdin [38ms]
+2026-05-21 02:20:07.078 [info] > git show --textconv :pemanager/backend/firewallmanage/services/nft_writer.py [25ms]
+2026-05-21 02:20:07.105 [info] > git ls-files --stage -- pemanager/backend/firewallmanage/services/nft_writer.py [43ms] 
+2026-05-21 02:20:07.116 [info] > git cat-file -s 1acdf5da0c0384cc08536106690a0ea155bcf45f [1ms] 
+2026-05-21 02:20:20.059 [info] > git show --textconv :pemanager/backend/firewallmanage/services/iptables_writer.py [25ms]
+2026-05-21 02:20:20.060 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/backend/firewallmanage/services/iptables_writer.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fiptables_writer.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:20:20.064 [info] > git ls-files --stage -- pemanager/backend/firewallmanage/services/iptables_writer.py [23ms] 
+2026-05-21 02:20:20.064 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/backend/firewallmanage/services/iptables_writer.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fiptables_writer.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:20:21.133 [info] > git show --textconv :pemanager/backend/firewallmanage/services/engine.py [25ms]
+2026-05-21 02:20:21.134 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/backend/firewallmanage/services/engine.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fengine.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:20:21.138 [info] > git ls-files --stage -- pemanager/backend/firewallmanage/services/engine.py [23ms] 
+2026-05-21 02:20:21.138 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/backend/firewallmanage/services/engine.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fengine.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:20:25.144 [info] > git show --textconv :pemanager/backend/firewallmanage/services/iptables_writer.py [24ms]
+2026-05-21 02:20:25.145 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/backend/firewallmanage/services/iptables_writer.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fiptables_writer.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:20:25.149 [info] > git ls-files --stage -- pemanager/backend/firewallmanage/services/iptables_writer.py [23ms] 
+2026-05-21 02:20:25.150 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/backend/firewallmanage/services/iptables_writer.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fiptables_writer.py%22%2C%22ref%22%3A%22%22%7D

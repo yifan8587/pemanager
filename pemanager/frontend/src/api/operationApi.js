@@ -11,6 +11,16 @@ export const operationApi = {
 
   ping: (payload) => http.post('/api/operationmanage/tools/ping/', payload).then((r) => r.data),
   mtr: (payload) => http.post('/api/operationmanage/tools/mtr/', payload).then((r) => r.data),
+  diagnose: (payload) =>
+    http.post('/api/operationmanage/tools/diagnose/', payload).then((r) => r.data),
+  diagnoseTarget: (id, payload = {}) =>
+    http
+      .post(`/api/operationmanage/monitor-targets/${id}/diagnose/`, payload)
+      .then((r) => r.data),
+  getJob: (id) =>
+    http.get(`/api/operationmanage/tools/jobs/${id}/`).then((r) => r.data),
+  listJobs: (params) =>
+    http.get('/api/operationmanage/tools/jobs/', { params }).then((r) => r.data),
   trafficLive: (payload) =>
     http.post('/api/operationmanage/tools/traffic/live/', payload).then((r) => r.data),
   trafficBatch: (interfaces) =>
@@ -41,5 +51,33 @@ export const operationApi = {
   sampleAllNow: (interfaces = []) =>
     http
       .post('/api/operationmanage/sample-now/', { interfaces })
+      .then((r) => r.data),
+
+  // 接口流量监控对象（MonitorInterface）
+  listMonitorInterfaces: () =>
+    http
+      .get('/api/operationmanage/monitor-interfaces/')
+      .then((r) => unwrapList(r.data)),
+  createMonitorInterface: (payload) =>
+    http.post('/api/operationmanage/monitor-interfaces/', payload),
+  patchMonitorInterface: (id, payload) =>
+    http.patch(`/api/operationmanage/monitor-interfaces/${id}/`, payload),
+  deleteMonitorInterface: (id) =>
+    http.delete(`/api/operationmanage/monitor-interfaces/${id}/`),
+  sampleMonitorInterfaceNow: (id) =>
+    http
+      .post(`/api/operationmanage/monitor-interfaces/${id}/sample-now/`)
+      .then((r) => r.data),
+  monitorInterfaceSeries: (id, params) =>
+    http
+      .get(`/api/operationmanage/monitor-interfaces/${id}/series/`, { params })
+      .then((r) => r.data),
+
+  // 常驻调度器
+  schedulerStatus: () =>
+    http.get('/api/operationmanage/scheduler/status/').then((r) => r.data),
+  schedulerControl: (action) =>
+    http
+      .post('/api/operationmanage/scheduler/control/', { action })
       .then((r) => r.data),
 }

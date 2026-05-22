@@ -1,14 +1,21 @@
 <script setup>
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { ElMessage } from 'element-plus'
-import { Connection } from '@element-plus/icons-vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Connection, Refresh, Switch, View } from '@element-plus/icons-vue'
 import { interfaceApi } from '../../api/interfaceApi'
+import { resourceApi } from '../../api/resourceApi'
 import PageHeader from '../../components/PageHeader.vue'
 
 const router = useRouter()
 const loading = ref(false)
+const syncing = ref(false)
+const driftLoading = ref(false)
 const data = ref(null)
+const drift = ref(null)
+const allocByIf = ref({})
+const ipsByIf = ref({})
+const tunnelByIf = ref({})
 
 const filters = reactive({
   kind: '',
@@ -25,8 +32,37 @@ async function load() {
     if (filters.admin_up !== '' && filters.admin_up != null) {
       params.admin_up = filters.admin_up
     }
-    const { data: d } = await interfaceApi.liveInventory(params)
-    data.value = d
+    const [inv, allocs, ips, tunnels] = await Promise.all([
+      interfaceApi.liveInventory(params).then((r) => r.data),
+      resourceApi.listAllocations().catch(() => []),
+      resourceApi.listIps().catch(() => []),
+      interfaceApi.listDesiredTunnels().catch(() => []),
+    ])
+    data.value = inv
+
+    const ab = {}
+    for (const a of allocs || []) {
+      const key = (a.interface_code || '').trim()
+      if (!key) continue
+      ab[key] = a
+    }
+    allocByIf.value = ab
+
+    const ib = {}
+    for (const ip of ips || []) {
+      const key = (ip.interface_code || '').trim()
+      if (!key) continue
+      ;(ib[key] ||= []).push(ip)
+    }
+    ipsByIf.value = ib
+
+    const tb = {}
+    for (const t of tunnels || []) {
+      const key = (t.ifname || '').trim()
+      if (!key) continue
+      tb[key] = t
+    }
+    tunnelByIf.value = tb
   } catch (e) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
   } finally {
@@ -34,26 +70,170 @@ async function load() {
   }
 }
 
-function openDetail(row) {
-  router.push({
-    name: 'iface-live-detail',
-    params: { ifname: row.ifname },
-  })
+async function checkDrift() {
+  driftLoading.value = true
+  try {
+    const { data: d } = await interfaceApi.drift()
+    drift.value = d
+    if (d?.in_sync) {
+      ElMessage.success('系统与数据库一致')
+    } else {
+      ElMessage.warning('存在差异，可点击「同步入库」执行回写')
+    }
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '比对失败')
+  } finally {
+    driftLoading.value = false
+  }
 }
 
-onMounted(load)
+async function syncFromSystem() {
+  try {
+    await ElMessageBox.confirm(
+      '将以「系统现场（netplan + ip + wg）」为准，重写 interfacemanage 数据库镜像。继续？',
+      '同步系统到数据库',
+      { type: 'warning', confirmButtonText: '执行同步', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  syncing.value = true
+  try {
+    const { data: r } = await interfaceApi.syncFromSystem()
+    if (r?.success === false) {
+      ElMessage.error(r?.error_message || '同步失败')
+    } else {
+      ElMessage.success(`同步完成（耗时 ${r?.duration_ms || 0} ms）`)
+    }
+    await Promise.all([load(), checkDrift()])
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '同步失败')
+  } finally {
+    syncing.value = false
+  }
+}
+
+function openDetail(row) {
+  router.push({ name: 'iface-live-detail', params: { ifname: row.ifname } })
+}
+
+function extractIPv4(row) {
+  const out = []
+  for (const a of row.addresses || []) {
+    for (const ai of a?.addr_info || []) {
+      if (ai.family === 'inet') {
+        out.push(`${ai.local}/${ai.prefixlen}`)
+      }
+    }
+  }
+  return out
+}
+
+function extractIPv6(row) {
+  const out = []
+  for (const a of row.addresses || []) {
+    for (const ai of a?.addr_info || []) {
+      if (ai.family === 'inet6' && ai.scope !== 'link') {
+        out.push(`${ai.local}/${ai.prefixlen}`)
+      }
+    }
+  }
+  return out
+}
+
+function dbIps(ifname) {
+  return ipsByIf.value[ifname] || []
+}
+
+function allocation(ifname) {
+  return allocByIf.value[ifname] || null
+}
+
+/**
+ * 接口归属客户的多源回退：
+ *   1) 隧道意图 DesiredTunnelConfig.customer（最权威，配置时显式选择）
+ *   2) 带宽分配 BandwidthAllocation.customer
+ *   3) 已分配 IP 的 customer（取第一条已分配的）
+ * 返回 { code, name } 或 null
+ */
+function customerOf(ifname) {
+  const t = tunnelByIf.value[ifname]
+  if (t?.customer_code) {
+    return { code: t.customer_code, name: t.customer_name || t.customer_code, source: '隧道意图' }
+  }
+  const a = allocByIf.value[ifname]
+  if (a?.customer_code) {
+    return { code: a.customer_code, name: a.customer_name || a.customer_code, source: '带宽分配' }
+  }
+  const ips = ipsByIf.value[ifname] || []
+  const allocIp = ips.find((ip) => ip.customer_code && ip.state === 'allocated') || ips.find((ip) => ip.customer_code)
+  if (allocIp) {
+    return { code: allocIp.customer_code, name: allocIp.customer_name || allocIp.customer_code, source: 'IP 资源' }
+  }
+  return null
+}
+
+const upCount = computed(
+  () => (data.value?.interfaces || []).filter((r) => r.admin_up).length,
+)
+
+onMounted(() => {
+  load()
+  checkDrift()
+})
 </script>
 
 <template>
   <div class="page">
-    <PageHeader
-      title="实时接口"
-      description="kernel + netplan + WireGuard 合并视图；双击行查看详情"
-      :icon="Connection"
-    >
+    <PageHeader title="接口管理" :icon="Connection">
       <template #actions>
-        <el-input v-model="filters.q" placeholder="接口名关键字" clearable style="width: 180px" size="small" />
-        <el-select v-model="filters.kind" placeholder="类型" clearable style="width: 130px" size="small">
+        <el-tag v-if="drift" size="small" :type="drift.in_sync ? 'success' : 'warning'" effect="dark">
+          {{ drift.in_sync ? '与数据库一致' : '与数据库存在差异' }}
+        </el-tag>
+        <el-button :loading="driftLoading" @click="checkDrift">
+          <el-icon><View /></el-icon>
+          <span>比对</span>
+        </el-button>
+        <el-button type="primary" :loading="syncing" @click="syncFromSystem">
+          <el-icon><Switch /></el-icon>
+          <span>同步系统↔数据库</span>
+        </el-button>
+        <el-button :loading="loading" @click="load">
+          <el-icon><Refresh /></el-icon>
+          <span>刷新</span>
+        </el-button>
+      </template>
+    </PageHeader>
+
+    <el-row :gutter="12" class="stat-row">
+      <el-col :xs="12" :md="6">
+        <div class="stat">
+          <div class="lbl">接口总数</div>
+          <div class="val">{{ data?.count ?? 0 }}</div>
+        </div>
+      </el-col>
+      <el-col :xs="12" :md="6">
+        <div class="stat">
+          <div class="lbl">UP</div>
+          <div class="val ok">{{ upCount }}</div>
+        </div>
+      </el-col>
+      <el-col :xs="24" :md="12">
+        <div class="stat stat-kinds">
+          <div class="lbl">类型分布</div>
+          <div class="kind-tags">
+            <el-tag v-for="(n, k) in data?.summary || {}" :key="k" size="small" type="info">
+              {{ k }}: {{ n }}
+            </el-tag>
+          </div>
+        </div>
+      </el-col>
+    </el-row>
+
+    <el-card shadow="never" class="filter-card">
+      <div class="filter-bar">
+        <el-input v-model="filters.q" placeholder="接口名关键字" clearable style="width: 200px" size="small" @keyup.enter="load" />
+        <el-select v-model="filters.kind" placeholder="类型" clearable style="width: 150px" size="small">
           <el-option label="ether" value="ether" />
           <el-option label="loopback" value="loopback" />
           <el-option label="gre" value="gre" />
@@ -63,60 +243,105 @@ onMounted(load)
           <el-option label="bond" value="bond" />
           <el-option label="vlan" value="vlan" />
         </el-select>
-        <el-select v-model="filters.admin_up" placeholder="admin_up" clearable style="width: 110px" size="small">
+        <el-select v-model="filters.admin_up" placeholder="管理状态" clearable style="width: 130px" size="small">
           <el-option label="UP" value="true" />
           <el-option label="DOWN" value="false" />
         </el-select>
         <el-button type="primary" size="small" :loading="loading" @click="load">查询</el-button>
-      </template>
-    </PageHeader>
+      </div>
+    </el-card>
 
-    <el-row :gutter="16" class="summary" v-if="data">
-      <el-col :span="24">
-        <el-card shadow="never">
-          <template #header>类型分布</template>
-          <el-space wrap>
-            <el-tag v-for="(n, k) in data.summary || {}" :key="k" type="info">
-              {{ k }}: {{ n }}
-            </el-tag>
-          </el-space>
-        </el-card>
-      </el-col>
-    </el-row>
-
-    <el-table
-      :data="data?.interfaces || []"
-      v-loading="loading"
-      border
-      size="small"
-      @row-dblclick="openDetail"
-    >
-      <el-table-column prop="ifname" label="接口" width="160" fixed>
+    <el-table :data="data?.interfaces || []" v-loading="loading" border size="small" class="iface-table">
+      <el-table-column prop="ifname" label="接口" width="150" fixed>
         <template #default="{ row }">
           <el-button link type="primary" @click="openDetail(row)">{{ row.ifname }}</el-button>
         </template>
       </el-table-column>
-      <el-table-column prop="kind" label="类型" width="120" />
-      <el-table-column prop="admin_up" label="UP" width="80">
+      <el-table-column label="类型" width="100">
         <template #default="{ row }">
-          <el-tag size="small" :type="row.admin_up ? 'success' : 'info'">
-            {{ row.admin_up ? '是' : '否' }}
+          <el-tag size="small">{{ row.kind }}</el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="状态" width="90">
+        <template #default="{ row }">
+          <el-tag size="small" :type="row.admin_up ? 'success' : 'info'" effect="dark">
+            {{ row.admin_up ? 'UP' : 'DOWN' }}
           </el-tag>
         </template>
       </el-table-column>
-      <el-table-column prop="operstate" label="运行" width="100" />
-      <el-table-column prop="mtu" label="MTU" width="80" />
-      <el-table-column prop="netplan_kind" label="Netplan段" width="110" />
-      <el-table-column prop="netplan_tunnel_mode" label="隧道模式" width="120" show-overflow-tooltip />
-      <el-table-column label="地址数" width="80">
+      <el-table-column label="MTU" width="80" prop="mtu" />
+      <el-table-column label="IPv4 地址" min-width="180">
         <template #default="{ row }">
-          {{ (row.addresses || []).length }}
+          <div v-if="extractIPv4(row).length" class="ip-list">
+            <code v-for="ip in extractIPv4(row)" :key="ip" class="ip">{{ ip }}</code>
+          </div>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="IPv6 地址" min-width="200">
+        <template #default="{ row }">
+          <div v-if="extractIPv6(row).length" class="ip-list">
+            <code v-for="ip in extractIPv6(row)" :key="ip" class="ip ip6">{{ ip }}</code>
+          </div>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="资源库 IP" min-width="170">
+        <template #default="{ row }">
+          <div v-if="dbIps(row.ifname).length" class="ip-list">
+            <el-tooltip
+              v-for="ip in dbIps(row.ifname)"
+              :key="ip.id"
+              :content="`${ip.state}${ip.customer_code ? ' · ' + ip.customer_code : ''}`"
+              placement="top"
+            >
+              <el-tag size="small" :type="ip.state === 'allocated' ? 'success' : ip.state === 'reserved' ? 'warning' : 'info'">
+                {{ ip.address }}
+              </el-tag>
+            </el-tooltip>
+          </div>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="客户" width="180">
+        <template #default="{ row }">
+          <el-tooltip
+            v-if="customerOf(row.ifname)"
+            :content="`客户编码：${customerOf(row.ifname).code} · 来源：${customerOf(row.ifname).source}`"
+            placement="top"
+          >
+            <div class="cust-cell">
+              <strong>{{ customerOf(row.ifname).name }}</strong>
+              <span class="muted">（{{ customerOf(row.ifname).code }}）</span>
+            </div>
+          </el-tooltip>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="限速 (Mbps)" width="130">
+        <template #default="{ row }">
+          <div v-if="allocation(row.ifname)" class="bw-cell">
+            <strong>{{ allocation(row.ifname).allocated_mbps }}</strong>
+            <span class="muted"> Mbps</span>
+            <div class="pool">池: {{ allocation(row.ifname).pool_name }}</div>
+          </div>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="90" fixed="right">
+        <template #default="{ row }">
+          <el-button link type="primary" @click="openDetail(row)">详情</el-button>
         </template>
       </el-table-column>
     </el-table>
-    <el-text v-if="data?.sources" size="small" type="info">
-      源状态：kernel_link_ok={{ data.sources.kernel_link_ok }}，wireguard_ok={{ data.sources.wireguard_ok }}
-    </el-text>
+
+    <div v-if="data?.sources" class="src-hint">
+      <span class="pe-dot" :class="data.sources.kernel_link_ok ? 'ok' : 'err'"></span> kernel
+      <span class="pe-dot" :class="data.sources.wireguard_ok ? 'ok' : 'warn'" style="margin-left: 12px"></span> wireguard
+      <span v-if="drift && drift.in_sync === false" style="margin-left: 12px; color: var(--pe-warning)">
+        · 数据库镜像有差异，请点击「同步系统↔数据库」执行回写
+      </span>
+    </div>
   </div>
 </template>
 
@@ -126,7 +351,34 @@ onMounted(load)
   flex-direction: column;
   gap: 12px;
 }
-.summary {
-  margin-bottom: 0;
+.stat-row { margin: 0; }
+.stat {
+  background: var(--pe-card);
+  border: 1px solid var(--pe-border-soft);
+  border-radius: var(--pe-radius);
+  padding: 10px 14px;
+  box-shadow: var(--pe-shadow-sm);
+}
+.lbl { color: var(--pe-text-mute); font-size: 11px; letter-spacing: 0.3px; text-transform: uppercase; }
+.val { font-size: 20px; font-weight: 600; margin-top: 2px; font-variant-numeric: tabular-nums; }
+.val.ok { color: var(--pe-success); }
+.stat-kinds { padding-top: 8px; }
+.kind-tags { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.filter-card :deep(.el-card__body) { padding: 10px 12px; }
+.filter-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.iface-table { width: 100%; }
+.ip-list { display: flex; flex-direction: column; gap: 2px; }
+.ip { font-family: var(--pe-mono); font-size: 12px; background: #f0f5ff; color: #1d4ed8; padding: 1px 6px; border-radius: 4px; }
+.ip.ip6 { background: #f5f3ff; color: #6d28d9; }
+.muted { color: var(--pe-text-mute); }
+.bw-cell strong { color: var(--pe-primary); }
+.cust-cell { display: flex; align-items: baseline; gap: 4px; line-height: 1.2; }
+.cust-cell strong { color: var(--pe-primary); }
+.cust-cell .muted { font-size: 12px; }
+.pool { font-size: 11px; color: var(--pe-text-mute); margin-top: 1px; }
+.src-hint {
+  font-size: 12px;
+  color: var(--pe-text-mute);
+  padding: 6px 4px 0;
 }
 </style>

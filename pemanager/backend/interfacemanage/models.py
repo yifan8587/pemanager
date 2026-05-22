@@ -102,6 +102,15 @@ class DesiredTunnelConfig(models.Model):
     kind = models.CharField('类型', max_length=32, choices=Kind.choices, db_index=True)
     ifname = models.CharField('接口名', max_length=128, unique=True, db_index=True)
     spec = models.JSONField('配置载荷', default=dict, blank=True, help_text='与 netplan / wg 对齐的结构化字段')
+    customer = models.ForeignKey(
+        'resourcemanage.ResourceCustomer',
+        verbose_name='关联客户',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='desired_tunnel_configs',
+        help_text='仅用于业务关联与权限作用域，不会写入 netplan/wg-quick 等系统配置文件',
+    )
     remark = models.CharField('备注', max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

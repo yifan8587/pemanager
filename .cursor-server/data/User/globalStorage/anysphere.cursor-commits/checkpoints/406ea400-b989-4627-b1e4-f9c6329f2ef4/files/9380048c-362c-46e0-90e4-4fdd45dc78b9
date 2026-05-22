@@ -1,0 +1,79 @@
+"""客户作用域工具：把"当前用户能看到哪些客户/接口名"集中起来，便于各 viewset 复用。"""
+from __future__ import annotations
+
+from typing import Iterable
+
+from resourcemanage.models import IPAddressEntry, ResourceCustomer
+
+
+def is_admin(user) -> bool:
+    return bool(user and user.is_authenticated and getattr(user, 'is_admin_role', False))
+
+
+def is_operator(user) -> bool:
+    return bool(user and user.is_authenticated and getattr(user, 'is_operator_role', False))
+
+
+def scope_customer(user) -> ResourceCustomer | None:
+    """返回该用户绑定的客户；管理员/运维返回 None（表示无作用域限制）。"""
+    if not (user and user.is_authenticated):
+        return None
+    if getattr(user, 'is_admin_role', False) or getattr(user, 'is_operator_role', False):
+        return None
+    cust = getattr(user, 'customer', None)
+    return cust if cust else None
+
+
+def scope_interface_codes(user) -> set[str] | None:
+    """返回该用户能访问的接口标识集合；None 表示无限制（admin/operator）。
+
+    客户能访问的接口 = 该客户在 IPAddressEntry 中所有非空的 `interface_code` 的去重集合，
+    并叠加：BandwidthAllocation 中该客户的 `interface_code`、QoSPolicy 中绑定该客户的 `interface_name`。
+    """
+    cust = scope_customer(user)
+    if cust is None and (is_admin(user) or is_operator(user)):
+        return None
+    if cust is None:
+        # 未绑定客户的非 admin 用户：视为没有任何接口
+        return set()
+
+    codes: set[str] = set()
+    # 1) IP 表
+    for ic in IPAddressEntry.objects.filter(customer=cust).exclude(interface_code='').values_list(
+        'interface_code', flat=True
+    ):
+        if ic:
+            codes.add(ic.strip())
+
+    # 2) 带宽分配
+    try:
+        from resourcemanage.models import BandwidthAllocation
+
+        for ic in BandwidthAllocation.objects.filter(customer=cust).exclude(interface_code='').values_list(
+            'interface_code', flat=True
+        ):
+            if ic:
+                codes.add(ic.strip())
+    except Exception:  # noqa: BLE001
+        pass
+
+    # 3) QoS 策略
+    try:
+        from qosmanage.models import QoSPolicy
+
+        for nm in QoSPolicy.objects.filter(customer=cust).exclude(interface_name='').values_list(
+            'interface_name', flat=True
+        ):
+            if nm:
+                codes.add(nm.strip())
+    except Exception:  # noqa: BLE001
+        pass
+
+    return codes
+
+
+def filter_by_interface_codes(qs, field: str, codes: Iterable[str] | None):
+    """通用：把 queryset 按"接口字段属于该集合"过滤；codes=None 表示无限制。"""
+    if codes is None:
+        return qs
+    return qs.filter(**{f'{field}__in': list(codes)})

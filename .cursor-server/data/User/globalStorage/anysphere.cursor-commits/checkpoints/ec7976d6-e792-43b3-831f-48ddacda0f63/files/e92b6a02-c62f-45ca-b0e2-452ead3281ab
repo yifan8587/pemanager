@@ -1,0 +1,398 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { DataAnalysis } from '@element-plus/icons-vue'
+import { qosApi } from '../../api/qosApi'
+import { interfaceApi } from '../../api/interfaceApi'
+import JsonBlock from '../../components/JsonBlock.vue'
+import PageHeader from '../../components/PageHeader.vue'
+
+const loading = ref(false)
+const policies = ref([])
+const ifaces = ref([])
+const detail = ref(null)
+const showTcResult = ref(null)
+const preview = ref(null)
+const lastApply = ref(null)
+const applying = ref(false)
+
+const dlg = ref(false)
+const editingId = ref(null)
+const saving = ref(false)
+const form = reactive({
+  name: '',
+  interface_name: '',
+  direction: 'egress',
+  root_kind: 'htb',
+  default_rate_mbps: 100,
+  default_ceil_mbps: 100,
+  enabled: true,
+  remark: '',
+})
+const title = computed(() => (editingId.value ? '编辑策略' : '新增策略'))
+
+const ruleDlg = ref(false)
+const editingRuleId = ref(null)
+const ruleForm = reactive({
+  policy: '',
+  class_id: 10,
+  rate_mbps: 10,
+  ceil_mbps: 10,
+  priority: 4,
+  match_kind: 'dst',
+  match_value: '',
+  remark: '',
+})
+
+async function load() {
+  loading.value = true
+  try {
+    policies.value = await qosApi.listPolicies()
+  } catch (e) {
+    ElMessage.error(e?.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadIfaces() {
+  try {
+    const { data } = await interfaceApi.liveInventory()
+    ifaces.value = data.interfaces || []
+  } catch {
+    ifaces.value = []
+  }
+}
+
+function openCreate() {
+  editingId.value = null
+  Object.assign(form, {
+    name: '',
+    interface_name: '',
+    direction: 'egress',
+    root_kind: 'htb',
+    default_rate_mbps: 100,
+    default_ceil_mbps: 100,
+    enabled: true,
+    remark: '',
+  })
+  dlg.value = true
+}
+function openEdit(row) {
+  editingId.value = row.id
+  Object.assign(form, {
+    name: row.name,
+    interface_name: row.interface_name,
+    direction: row.direction,
+    root_kind: row.root_kind,
+    default_rate_mbps: row.default_rate_mbps,
+    default_ceil_mbps: row.default_ceil_mbps,
+    enabled: row.enabled,
+    remark: row.remark || '',
+  })
+  dlg.value = true
+}
+
+async function save() {
+  saving.value = true
+  try {
+    if (editingId.value) {
+      await qosApi.patchPolicy(editingId.value, form)
+      ElMessage.success('已更新')
+    } else {
+      await qosApi.createPolicy(form)
+      ElMessage.success('已创建')
+    }
+    dlg.value = false
+    await load()
+  } catch (e) {
+    ElMessage.error(JSON.stringify(e?.response?.data || e.message))
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  try {
+    await ElMessageBox.confirm(`删除策略 ${row.name}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  await qosApi.deletePolicy(row.id)
+  ElMessage.success('已删除')
+  await load()
+}
+
+async function openDetail(row) {
+  detail.value = await qosApi.getPolicy(row.id)
+  preview.value = null
+  showTcResult.value = null
+  lastApply.value = null
+}
+
+async function doPreview() {
+  if (!detail.value) return
+  preview.value = await qosApi.previewPolicy(detail.value.id)
+}
+
+async function doApply(phase) {
+  if (!detail.value) return
+  const text =
+    phase === 'clear'
+      ? `将清除 ${detail.value.interface_name} 上的 tc 根 qdisc。是否继续？`
+      : `将以 ${detail.value.interface_name} 为目标执行 tc 命令集。是否继续？`
+  try {
+    await ElMessageBox.confirm(text, '下发确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  applying.value = true
+  try {
+    const { data } = await qosApi.applyPolicy(detail.value.id, { phase })
+    lastApply.value = data
+    if (data.ok) ElMessage.success(`阶段 ${phase} 完成`)
+    else ElMessage.error(data.error || '失败')
+  } catch (e) {
+    lastApply.value = e?.response?.data
+    ElMessage.error('请求失败')
+  } finally {
+    applying.value = false
+  }
+}
+
+async function doShow() {
+  if (!detail.value) return
+  showTcResult.value = await qosApi.showPolicy(detail.value.id)
+}
+
+function openRuleCreate() {
+  if (!detail.value) return
+  editingRuleId.value = null
+  Object.assign(ruleForm, {
+    policy: detail.value.id,
+    class_id: 10,
+    rate_mbps: 10,
+    ceil_mbps: 10,
+    priority: 4,
+    match_kind: 'dst',
+    match_value: '',
+    remark: '',
+  })
+  ruleDlg.value = true
+}
+function openRuleEdit(r) {
+  if (!detail.value) return
+  editingRuleId.value = r.id
+  Object.assign(ruleForm, {
+    policy: detail.value.id,
+    class_id: r.class_id,
+    rate_mbps: r.rate_mbps,
+    ceil_mbps: r.ceil_mbps,
+    priority: r.priority,
+    match_kind: r.match_kind,
+    match_value: r.match_value || '',
+    remark: r.remark || '',
+  })
+  ruleDlg.value = true
+}
+async function saveRule() {
+  try {
+    if (editingRuleId.value) await qosApi.patchRule(editingRuleId.value, ruleForm)
+    else await qosApi.createRule(ruleForm)
+    ElMessage.success('已保存')
+    ruleDlg.value = false
+    await openDetail(detail.value)
+    await load()
+  } catch (e) {
+    ElMessage.error(JSON.stringify(e?.response?.data || e.message))
+  }
+}
+async function removeRule(r) {
+  try {
+    await ElMessageBox.confirm(`删除规则 class:${r.class_id}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  await qosApi.deleteRule(r.id)
+  ElMessage.success('已删除')
+  await openDetail(detail.value)
+  await load()
+}
+
+onMounted(() => {
+  load()
+  loadIfaces()
+})
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader
+      title="QoS 策略"
+      description="基于 tc：HTB(分级限速) + 类规则 + filter；预览生成命令行，应用阶段会先删除 root qdisc 再下发"
+      :icon="DataAnalysis"
+    />
+
+    <el-row :gutter="12">
+      <el-col :span="14">
+        <el-card shadow="never">
+          <template #header>
+            <div class="row">
+              <span>策略列表</span>
+              <div class="spacer" />
+              <el-button type="primary" size="small" @click="openCreate">新增策略</el-button>
+              <el-button size="small" :loading="loading" @click="load">刷新</el-button>
+            </div>
+          </template>
+          <el-table :data="policies" border size="small" v-loading="loading" @row-click="openDetail" highlight-current-row>
+            <el-table-column prop="name" label="名称" min-width="120" />
+            <el-table-column prop="interface_name" label="接口" width="120" />
+            <el-table-column prop="root_kind" label="qdisc" width="100" />
+            <el-table-column prop="direction" label="方向" width="80" />
+            <el-table-column label="默认速率" width="160">
+              <template #default="{ row }">{{ row.default_rate_mbps }}/{{ row.default_ceil_mbps }} Mbps</template>
+            </el-table-column>
+            <el-table-column prop="enabled" label="启用" width="80">
+              <template #default="{ row }">
+                <el-tag :type="row.enabled ? 'success' : 'info'" size="small">{{ row.enabled ? '是' : '否' }}</el-tag>
+              </template>
+            </el-table-column>
+            <el-table-column label="操作" width="160" fixed="right">
+              <template #default="{ row }">
+                <el-button link type="primary" size="small" @click.stop="openEdit(row)">编辑</el-button>
+                <el-button link type="danger" size="small" @click.stop="remove(row)">删除</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </el-card>
+      </el-col>
+
+      <el-col :span="10">
+        <el-card shadow="never">
+          <template #header>
+            <div class="row">
+              <span>{{ detail ? `策略详情：${detail.name}` : '点击左侧策略查看详情' }}</span>
+              <div class="spacer" />
+              <el-button v-if="detail" size="small" @click="doPreview">预览命令</el-button>
+              <el-button v-if="detail" type="warning" size="small" :loading="applying" @click="doApply('apply')">下发</el-button>
+              <el-button v-if="detail" type="danger" size="small" plain :loading="applying" @click="doApply('clear')">清除</el-button>
+              <el-button v-if="detail" size="small" @click="doShow">读取 tc -s</el-button>
+            </div>
+          </template>
+          <div v-if="!detail" class="muted">—</div>
+          <template v-else>
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="接口">{{ detail.interface_name }}</el-descriptions-item>
+              <el-descriptions-item label="qdisc">{{ detail.root_kind }}</el-descriptions-item>
+              <el-descriptions-item label="rate">{{ detail.default_rate_mbps }}Mbps</el-descriptions-item>
+              <el-descriptions-item label="ceil">{{ detail.default_ceil_mbps }}Mbps</el-descriptions-item>
+              <el-descriptions-item label="备注" :span="2">{{ detail.remark || '—' }}</el-descriptions-item>
+            </el-descriptions>
+
+            <div class="row" style="margin-top: 10px">
+              <strong>HTB 类规则</strong>
+              <div class="spacer" />
+              <el-button type="primary" size="small" :disabled="detail.root_kind !== 'htb'" @click="openRuleCreate">新增规则</el-button>
+            </div>
+            <el-table :data="detail.rules" border size="small">
+              <el-table-column prop="class_id" label="class" width="70" />
+              <el-table-column prop="match_kind" label="匹配" width="70" />
+              <el-table-column prop="match_value" label="匹配值" />
+              <el-table-column label="rate/ceil" width="140">
+                <template #default="{ row }">{{ row.rate_mbps }}/{{ row.ceil_mbps }} Mbps</template>
+              </el-table-column>
+              <el-table-column prop="priority" label="prio" width="60" />
+              <el-table-column label="操作" width="120">
+                <template #default="{ row }">
+                  <el-button link size="small" @click="openRuleEdit(row)">编辑</el-button>
+                  <el-button link type="danger" size="small" @click="removeRule(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+
+            <el-collapse v-if="preview" style="margin-top: 12px">
+              <el-collapse-item title="预览命令" name="p">
+                <pre class="mono">{{ (preview.commands || []).join('\n') }}</pre>
+              </el-collapse-item>
+            </el-collapse>
+            <el-collapse v-if="lastApply" style="margin-top: 8px">
+              <el-collapse-item title="下发结果" name="a">
+                <JsonBlock :data="lastApply" :rows="18" />
+              </el-collapse-item>
+            </el-collapse>
+            <el-collapse v-if="showTcResult" style="margin-top: 8px">
+              <el-collapse-item title="tc -s 输出" name="s">
+                <pre class="mono" v-for="k in ['qdisc','class','filter']" :key="k">{{ k }}: {{ showTcResult[k]?.stdout || showTcResult[k]?.stderr || '' }}</pre>
+              </el-collapse-item>
+            </el-collapse>
+          </template>
+        </el-card>
+      </el-col>
+    </el-row>
+
+    <el-dialog v-model="dlg" :title="title" width="560px" destroy-on-close>
+      <el-form label-width="130px">
+        <el-form-item label="名称" required><el-input v-model="form.name" /></el-form-item>
+        <el-form-item label="接口" required>
+          <el-select v-model="form.interface_name" filterable allow-create placeholder="选择或输入" style="width:100%">
+            <el-option v-for="i in ifaces" :key="i.ifname" :label="`${i.ifname} (${i.kind})`" :value="i.ifname" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="方向">
+          <el-select v-model="form.direction" style="width:100%">
+            <el-option label="出向 egress" value="egress" />
+            <el-option label="入向 ingress" value="ingress" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="根 qdisc">
+          <el-select v-model="form.root_kind" style="width:100%">
+            <el-option label="HTB" value="htb" />
+            <el-option label="fq_codel" value="fq_codel" />
+            <el-option label="CAKE" value="cake" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="默认 rate(Mbps)"><el-input-number v-model="form.default_rate_mbps" :min="1" /></el-form-item>
+        <el-form-item label="默认 ceil(Mbps)"><el-input-number v-model="form.default_ceil_mbps" :min="1" /></el-form-item>
+        <el-form-item label="启用"><el-switch v-model="form.enabled" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="form.remark" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dlg = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="ruleDlg" :title="editingRuleId ? '编辑规则' : '新增规则'" width="540px" destroy-on-close>
+      <el-form label-width="120px">
+        <el-form-item label="class id" required><el-input-number v-model="ruleForm.class_id" :min="10" /></el-form-item>
+        <el-form-item label="rate(Mbps)" required><el-input-number v-model="ruleForm.rate_mbps" :min="1" /></el-form-item>
+        <el-form-item label="ceil(Mbps)" required><el-input-number v-model="ruleForm.ceil_mbps" :min="1" /></el-form-item>
+        <el-form-item label="priority(1-7)"><el-input-number v-model="ruleForm.priority" :min="1" :max="7" /></el-form-item>
+        <el-form-item label="匹配字段">
+          <el-select v-model="ruleForm.match_kind" style="width:100%">
+            <el-option label="目的 CIDR (dst)" value="dst" />
+            <el-option label="源 CIDR (src)" value="src" />
+            <el-option label="DSCP" value="dscp" />
+            <el-option label="任意" value="any" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="匹配值">
+          <el-input v-model="ruleForm.match_value" placeholder="CIDR 或 DSCP 整数；any 留空" />
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="ruleForm.remark" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="ruleDlg = false">取消</el-button>
+        <el-button type="primary" @click="saveRule">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.spacer { flex: 1; }
+.muted { color: var(--el-text-color-secondary); padding: 24px; text-align: center; }
+.mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace; font-size: 12px; background: var(--el-fill-color-light); padding: 8px; border-radius: 4px; overflow:auto; max-height: 240px; }
+</style>

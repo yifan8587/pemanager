@@ -29,7 +29,24 @@ urlpatterns = [
         views.InterfaceDetailView.as_view(),
         name='interfacemanage-interface-detail',
     ),
+    path(
+        'interfaces/<str:ifname>/preview-config/',
+        views.InterfacePreviewConfigView.as_view(),
+        name='interfacemanage-interface-preview-config',
+    ),
+    path(
+        'interfaces/<str:ifname>/apply-config/',
+        views.InterfaceApplyConfigView.as_view(),
+        name='interfacemanage-interface-apply-config',
+    ),
+    path(
+        'interfaces/<str:ifname>/remove-config/',
+        views.InterfaceRemoveConfigView.as_view(),
+        name='interfacemanage-interface-remove-config',
+    ),
     path('db/sync/from-system/', views.SyncFromSystemView.as_view(), name='iface-db-sync-from-system'),
     path('db/drift/', views.NetworkDriftView.as_view(), name='iface-db-drift'),
     path('db/', include(db_router.urls)),
+    path('tools/wg/genkey/', views.WireGuardGenKeyView.as_view(), name='iface-wg-genkey'),
+    path('tools/wg/pubkey/', views.WireGuardPubKeyView.as_view(), name='iface-wg-pubkey'),
 ]

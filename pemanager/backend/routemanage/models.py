@@ -1,4 +1,5 @@
 import ipaddress
+import re
 import uuid
 
 from django.core.exceptions import ValidationError
@@ -73,6 +74,15 @@ class DesiredRouteConfig(models.Model):
         related_name='route_intents',
         help_text='可选，绑定资源管理中已分配/预留的 IP，用于与接口标识对齐校验',
     )
+    customer = models.ForeignKey(
+        'resourcemanage.ResourceCustomer',
+        verbose_name='关联客户',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='desired_route_configs',
+        help_text='仅用于业务关联与权限作用域，不会写入 netplan / ip route / wg-quick 等系统配置文件',
+    )
     remark = models.CharField('备注', max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -133,3 +143,126 @@ class DesiredRouteConfig(models.Model):
                         )
                     }
                 )
+
+
+_FWMARK_RE = re.compile(r'^\s*0x[0-9a-fA-F]+|\d+(?:/0x[0-9a-fA-F]+|/\d+)?\s*$')
+
+
+class PolicyRouteRule(models.Model):
+    """
+    策略路由（ip rule）意图：维护 `ip rule add/del` 等价配置。
+    应用方式：通过 `ip rule` 直接下发到内核（不走 netplan，避免与 routing-policy 段冲突）。
+    可选 priority；priority 留空时由内核选择，但建议显式给出以避免重复与覆盖。
+    """
+
+    class Family(models.TextChoices):
+        INET = 'inet', 'IPv4 (inet)'
+        INET6 = 'inet6', 'IPv6 (inet6)'
+
+    class Action(models.TextChoices):
+        LOOKUP = 'lookup', '查表 lookup <table>'
+        BLACKHOLE = 'blackhole', '丢弃 blackhole'
+        UNREACHABLE = 'unreachable', '不可达 unreachable'
+        PROHIBIT = 'prohibit', '禁止 prohibit'
+        NAT = 'nat', 'NAT'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    name = models.CharField('名称', max_length=128, blank=True, help_text='可选，便于识别')
+    priority = models.PositiveIntegerField(
+        '优先级 priority',
+        null=True,
+        blank=True,
+        db_index=True,
+        help_text='ip rule priority；建议 10000-19999（pemanager 受控段）',
+    )
+    family = models.CharField(
+        '地址族', max_length=8, choices=Family.choices, default=Family.INET, db_index=True
+    )
+
+    invert = models.BooleanField('not (取反)', default=False)
+    from_cidr = models.CharField('源 (from)', max_length=128, blank=True)
+    to_cidr = models.CharField('目的 (to)', max_length=128, blank=True)
+    iif = models.CharField('入接口 iif', max_length=128, blank=True)
+    oif = models.CharField('出接口 oif', max_length=128, blank=True)
+    fwmark = models.CharField(
+        'fwmark', max_length=64, blank=True, help_text='例如 0x1 或 1/0xff'
+    )
+    tos = models.CharField('tos', max_length=16, blank=True)
+    suppress_prefixlength = models.PositiveIntegerField(
+        'suppress_prefixlength', null=True, blank=True
+    )
+
+    action = models.CharField(
+        '动作', max_length=16, choices=Action.choices, default=Action.LOOKUP
+    )
+    table_id = models.PositiveIntegerField(
+        '路由表 table', null=True, blank=True, help_text='action=lookup 时必填；可填表 ID'
+    )
+    nat_target = models.GenericIPAddressField('NAT 目标', null=True, blank=True, unpack_ipv4=True)
+
+    enabled = models.BooleanField('启用', default=True, db_index=True)
+    customer = models.ForeignKey(
+        'resourcemanage.ResourceCustomer',
+        verbose_name='关联客户',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='policy_route_rules',
+        help_text='仅用于业务关联与权限作用域，不会写入 ip rule 等系统配置文件',
+    )
+    remark = models.CharField('备注', max_length=512, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = '策略路由意图'
+        verbose_name_plural = verbose_name
+        ordering = ['priority', 'id']
+        indexes = [
+            models.Index(fields=['family', 'priority']),
+        ]
+
+    def __str__(self):
+        prio = f'#{self.priority} ' if self.priority is not None else ''
+        return f'{prio}{self.family} from {self.from_cidr or "all"} → {self.summarize_action()}'
+
+    def summarize_action(self) -> str:
+        if self.action == self.Action.LOOKUP:
+            return f'lookup {self.table_id if self.table_id is not None else "(?)"}'
+        if self.action == self.Action.NAT:
+            return f'nat {self.nat_target or "(?)"}'
+        return self.action
+
+    def clean(self):
+        super().clean()
+        for label, val in [('from_cidr', self.from_cidr), ('to_cidr', self.to_cidr)]:
+            t = (val or '').strip()
+            if not t:
+                continue
+            try:
+                ipaddress.ip_network(t, strict=False)
+            except ValueError as exc:
+                raise ValidationError({label: f'不是合法 CIDR: {exc}'}) from exc
+
+        if (self.fwmark or '').strip():
+            if not _FWMARK_RE.match(self.fwmark):
+                raise ValidationError({'fwmark': '格式应为 N 或 0xHEX 或 N/0xMASK'})
+
+        if self.action == self.Action.LOOKUP and self.table_id is None:
+            raise ValidationError({'table_id': 'action=lookup 时必须填路由表 ID'})
+        if self.action == self.Action.NAT and not self.nat_target:
+            raise ValidationError({'nat_target': 'action=nat 时必须填 NAT 目标'})
+
+        if not any(
+            [
+                (self.from_cidr or '').strip(),
+                (self.to_cidr or '').strip(),
+                (self.iif or '').strip(),
+                (self.oif or '').strip(),
+                (self.fwmark or '').strip(),
+                self.suppress_prefixlength is not None,
+            ]
+        ):
+            raise ValidationError(
+                '至少需要一个匹配条件（from/to/iif/oif/fwmark/suppress_prefixlength）'
+            )

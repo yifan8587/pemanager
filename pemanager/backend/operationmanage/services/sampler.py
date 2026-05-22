@@ -6,7 +6,12 @@ from typing import Any
 
 from django.utils import timezone
 
-from operationmanage.models import InterfaceTrafficSample, LatencySample, MonitorTarget
+from operationmanage.models import (
+    InterfaceTrafficSample,
+    LatencySample,
+    MonitorInterface,
+    MonitorTarget,
+)
 from operationmanage.services import probes
 
 
@@ -55,7 +60,16 @@ def sample_one_target(target: MonitorTarget) -> LatencySample:
             packets_sent=int(r.get('packets_sent') or 0),
             packets_recv=int(r.get('packets_recv') or 0),
             ok=bool(r.get('ok')),
-            detail={'stderr': r.get('stderr'), 'cmd': r.get('cmd')},
+            detail={
+                'cmd': r.get('cmd'),
+                'exit_code': r.get('exit_code'),
+                'stderr': (r.get('stderr') or '')[:1024],
+                'stdout_tail': (r.get('stdout') or '')[-512:],
+                'timed_out': r.get('timed_out'),
+                'subprocess_timeout_sec': r.get('subprocess_timeout_sec'),
+                'error': r.get('error'),
+                'diagnosis': r.get('diagnosis'),
+            },
         )
     target.last_sampled_at = timezone.now()
     target.save(update_fields=['last_sampled_at'])
@@ -96,3 +110,25 @@ def sample_interfaces(interfaces: list[str]) -> dict[str, Any]:
         )
         results.append({'interface': ifname, 'ok': True, 'rx_bps': r['rx_bps'], 'tx_bps': r['tx_bps']})
     return {'count': len(results), 'results': results}
+
+
+# ---------- 单接口流量采样（scheduler 用，按 MonitorInterface 节拍调用） ----------
+
+def sample_one_monitor_interface(mi: MonitorInterface) -> dict[str, Any]:
+    r = probes.traffic_live_window(mi.interface_name, window_sec=1.0)
+    if not r.get('ok'):
+        return {'ok': False, 'interface': mi.interface_name, 'error': r.get('error')}
+    InterfaceTrafficSample.objects.create(
+        interface_name=mi.interface_name,
+        ts=timezone.now(),
+        rx_bytes_total=r['rx_bytes_total'],
+        tx_bytes_total=r['tx_bytes_total'],
+        rx_packets_total=r['rx_packets_total'],
+        tx_packets_total=r['tx_packets_total'],
+        rx_bps=r['rx_bps'],
+        tx_bps=r['tx_bps'],
+        window_sec=r['window_sec'],
+    )
+    mi.last_sampled_at = timezone.now()
+    mi.save(update_fields=['last_sampled_at'])
+    return {'ok': True, 'interface': mi.interface_name, 'rx_bps': r['rx_bps'], 'tx_bps': r['tx_bps']}

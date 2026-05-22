@@ -1,14 +1,26 @@
-"""根据 QoSPolicy/QoSRule 渲染 `tc` 命令组并执行。"""
+"""根据 QoSPolicy 渲染并执行 `tc` 命令。
+
+支持两种模板（QoSPolicy.root_kind）：
+- htb : HTB 单类限速（生产推荐）。模板：
+    tc qdisc del dev <if> root
+    tc qdisc add  dev <if> root handle 1: htb default 1
+    tc class add  dev <if> parent 1: classid 1:1 htb rate <Rmbit> ceil <Rmbit>
+    tc qdisc add  dev <if> parent 1:1 fq_codel
+- tbf : TBF 极简硬限速。模板：
+    tc qdisc del dev <if> root
+    tc qdisc add dev <if> root tbf rate <Rmbit> burst <Bk> latency <Lms>
+
+实际下发速率 R = QoSPolicy.effective_rate_mbps（已含冗余度）。
+"""
 from __future__ import annotations
 
-import ipaddress
 import shlex
 from typing import Any, Literal
 
 from django.conf import settings
 
 from interfacemanage.services import subprocess_util
-from qosmanage.models import QoSPolicy, QoSRule
+from qosmanage.models import QoSPolicy
 
 Phase = Literal['preview', 'apply', 'clear']
 
@@ -26,120 +38,90 @@ def _quote_cmd(argv: list[str]) -> str:
     return ' '.join(shlex.quote(x) for x in argv)
 
 
-def _root_handle() -> str:
-    return '1:'
+def _run_with_prefix(argv: list[str], *, timeout: int | None = None):
+    full = _cmd_prefix() + argv
+    return subprocess_util.run(full, timeout=timeout)
 
 
-def _filter_protocol_for(rule: QoSRule) -> str:
-    if rule.match_kind in (QoSRule.Match.SRC, QoSRule.Match.DST) and rule.match_value:
-        try:
-            net = ipaddress.ip_network(rule.match_value.strip(), strict=False)
-            return 'ipv6' if net.version == 6 else 'ip'
-        except ValueError:
-            return 'ip'
-    return 'ip'
+# clear 阶段属于幂等：以下 stderr 视为 "已经没有 root qdisc" 而非真失败
+_BENIGN_CLEAR_STDERR = (
+    'cannot delete qdisc with handle of zero',
+    'no such file or directory',
+    'rtnetlink answers: no such file or directory',
+    'invalid handle',
+)
 
 
-def _u32_match(rule: QoSRule) -> list[str]:
-    """构造 tc filter u32 match 片段。"""
-    if rule.match_kind == QoSRule.Match.SRC and rule.match_value:
-        net = ipaddress.ip_network(rule.match_value.strip(), strict=False)
-        sel = 'src'
-        return ['match', 'ip' if net.version == 4 else 'ip6', sel, str(net)]
-    if rule.match_kind == QoSRule.Match.DST and rule.match_value:
-        net = ipaddress.ip_network(rule.match_value.strip(), strict=False)
-        sel = 'dst'
-        return ['match', 'ip' if net.version == 4 else 'ip6', sel, str(net)]
-    if rule.match_kind == QoSRule.Match.DSCP and rule.match_value:
-        dscp = int(rule.match_value.strip(), 0) & 0x3F
-        tos = (dscp << 2) & 0xFC
-        return ['match', 'ip', 'tos', f'0x{tos:02x}', '0xfc']
-    return ['match', 'u32', '0', '0']
+def _is_benign_clear_stderr(stderr: str) -> bool:
+    s = (stderr or '').lower()
+    return any(needle in s for needle in _BENIGN_CLEAR_STDERR)
+
+
+# ---------------------------------------------------------------------------
+# build_commands：两种模板
+# ---------------------------------------------------------------------------
+
+def _htb_quantum_for(rate_mbps: int) -> int:
+    """根据速率挑一个安全的 HTB class quantum（字节），消除
+    `sch_htb: quantum of class XXXX is big. Consider r2q change.` 警告。
+
+    经验表（MTU ≈ 1500，留 2~10 倍 MTU 余量，保证小流量不被饿死）：
+      rate ≤ 50  Mbps → 3000   (~2 MTU)
+      rate ≤ 200 Mbps → 6000   (~4 MTU)
+      rate ≤ 1   Gbps → 9000   (~6 MTU)
+      rate >  1  Gbps → 15000  (~10 MTU)
+    """
+    r = max(int(rate_mbps or 0), 1)
+    if r <= 50:
+        return 3000
+    if r <= 200:
+        return 6000
+    if r <= 1000:
+        return 9000
+    return 15000
 
 
 def build_commands(policy: QoSPolicy) -> list[list[str]]:
-    """返回 [ argv1, argv2, ... ]，每条独立执行；包含 root qdisc + classes + filters。"""
     iface = (policy.interface_name or '').strip()
     if not iface:
         return []
-
+    rate = max(int(policy.effective_rate_mbps), 1)
     cmds: list[list[str]] = []
 
-    if policy.root_kind == QoSPolicy.RootKind.HTB:
-        cmds.append(['tc', 'qdisc', 'add', 'dev', iface, 'root', 'handle', _root_handle(), 'htb', 'default', '10'])
+    if policy.root_kind == QoSPolicy.RootKind.HTB_SINGLE:
+        # HTB 单类：root 默认指向 1:1；rate=ceil 实现硬限速；叶子挂 fq_codel。
+        # - root qdisc 设置 `r2q 100`（自动算出来的 quantum = rate/r2q 不会过大）
+        # - class 上再显式 `quantum`，双保险，彻底消除 `sch_htb: quantum ... is big` 警告
+        quantum = _htb_quantum_for(rate)
         cmds.append(
             [
-                'tc', 'class', 'add', 'dev', iface, 'parent', _root_handle(),
-                'classid', '1:1',
-                'htb',
-                'rate', f'{policy.default_ceil_mbps}mbit',
-                'ceil', f'{policy.default_ceil_mbps}mbit',
+                'tc', 'qdisc', 'add', 'dev', iface, 'root', 'handle', '1:',
+                'htb', 'default', '1', 'r2q', '100',
             ]
         )
         cmds.append(
             [
-                'tc', 'class', 'add', 'dev', iface, 'parent', '1:1',
-                'classid', '1:10',
-                'htb',
-                'rate', f'{policy.default_rate_mbps}mbit',
-                'ceil', f'{policy.default_ceil_mbps}mbit',
+                'tc', 'class', 'add', 'dev', iface, 'parent', '1:',
+                'classid', '1:1', 'htb',
+                'rate', f'{rate}mbit', 'ceil', f'{rate}mbit',
+                'quantum', str(quantum),
             ]
         )
-        cmds.append(
-            ['tc', 'qdisc', 'add', 'dev', iface, 'parent', '1:10', 'handle', '10:', 'fq_codel']
-        )
+        cmds.append(['tc', 'qdisc', 'add', 'dev', iface, 'parent', '1:1', 'handle', '10:', 'fq_codel'])
 
-        for rule in policy.rules.all().order_by('priority', 'class_id'):
-            cid = int(rule.class_id)
-            classid = f'1:{cid}'
-            cmds.append(
-                [
-                    'tc', 'class', 'add', 'dev', iface, 'parent', '1:1',
-                    'classid', classid,
-                    'htb',
-                    'rate', f'{rule.rate_mbps}mbit',
-                    'ceil', f'{rule.ceil_mbps}mbit',
-                    'prio', str(rule.priority),
-                ]
-            )
-            cmds.append(
-                [
-                    'tc', 'qdisc', 'add', 'dev', iface,
-                    'parent', classid, 'handle', f'{cid}:', 'fq_codel',
-                ]
-            )
-            proto = _filter_protocol_for(rule)
-            f = [
-                'tc', 'filter', 'add', 'dev', iface, 'protocol', proto,
-                'parent', _root_handle(), 'prio', str(rule.priority), 'u32',
-            ]
-            f += _u32_match(rule)
-            f += ['flowid', classid]
-            cmds.append(f)
-
-    elif policy.root_kind == QoSPolicy.RootKind.FQ_CODEL:
-        cmds.append(['tc', 'qdisc', 'add', 'dev', iface, 'root', 'handle', _root_handle(), 'fq_codel'])
-
-    elif policy.root_kind == QoSPolicy.RootKind.CAKE:
-        rate = max(int(policy.default_ceil_mbps or 0), 1)
+    elif policy.root_kind == QoSPolicy.RootKind.TBF:
+        burst = max(int(policy.burst_kb or 32), 1)
+        latency = max(int(policy.latency_ms or 50), 1)
         cmds.append(
             [
-                'tc', 'qdisc', 'add', 'dev', iface, 'root', 'handle', _root_handle(),
-                'cake', 'bandwidth', f'{rate}mbit',
+                'tc', 'qdisc', 'add', 'dev', iface, 'root', 'tbf',
+                'rate', f'{rate}mbit',
+                'burst', f'{burst}kb',
+                'latency', f'{latency}ms',
             ]
         )
 
     return cmds
-
-
-def render_preview(policy: QoSPolicy) -> dict[str, Any]:
-    cmds = build_commands(policy)
-    return {
-        'ok': True,
-        'interface': policy.interface_name,
-        'commands': [_quote_cmd(c) for c in cmds],
-        'clear_commands': [_quote_cmd(c) for c in build_clear_commands(policy.interface_name)],
-    }
 
 
 def build_clear_commands(interface_name: str) -> list[list[str]]:
@@ -149,43 +131,86 @@ def build_clear_commands(interface_name: str) -> list[list[str]]:
     return [['tc', 'qdisc', 'del', 'dev', iface, 'root']]
 
 
-def _run_with_prefix(argv: list[str], *, timeout: int | None = None):
-    full = _cmd_prefix() + argv
-    return subprocess_util.run(full, timeout=timeout)
+def render_preview(policy: QoSPolicy) -> dict[str, Any]:
+    cmds = build_commands(policy)
+    return {
+        'ok': True,
+        'interface': policy.interface_name,
+        'kind': policy.root_kind,
+        'rate_mbps': int(policy.rate_mbps or 0),
+        'headroom_pct': int(policy.headroom_pct or 0),
+        'effective_rate_mbps': int(policy.effective_rate_mbps),
+        'commands': [_quote_cmd(c) for c in cmds],
+        'clear_commands': [_quote_cmd(c) for c in build_clear_commands(policy.interface_name)],
+    }
 
+
+# ---------------------------------------------------------------------------
+# apply / clear
+# ---------------------------------------------------------------------------
 
 def apply_policy(policy: QoSPolicy, *, phase: Phase = 'apply') -> dict[str, Any]:
-    """先尝试清理已有 root qdisc，再按 commands 顺序执行。"""
+    """先清理已有 root qdisc，再按 build_commands 顺序执行。"""
     if not getattr(settings, 'QOSMANAGE_APPLY_ENABLED', False):
-        return {'ok': False, 'error': 'QoS 下发已关闭（settings.QOSMANAGE_APPLY_ENABLED）', 'steps': []}
+        return {
+            'ok': False,
+            'error': 'QoS 下发已关闭：settings.QOSMANAGE_APPLY_ENABLED 为 False',
+            'hint': '请在后端进程环境中设置 QOSMANAGE_APPLY_ENABLED=1 并重启；同时确保 INTERFACEMANAGE_ALLOW_SUBPROCESS=1（tc 命令依赖 subprocess）',
+            'steps': [],
+        }
+    if not subprocess_util.subprocess_allowed():
+        return {
+            'ok': False,
+            'error': 'subprocess 已关闭：INTERFACEMANAGE_ALLOW_SUBPROCESS=False',
+            'hint': '请在后端进程环境中设置 INTERFACEMANAGE_ALLOW_SUBPROCESS=1 并重启',
+            'steps': [],
+        }
+    if not policy.enabled and phase == 'apply':
+        return {
+            'ok': False,
+            'error': '策略未启用（enabled=False）；请在列表中先启用再下发',
+            'steps': [],
+        }
 
     iface = (policy.interface_name or '').strip()
     if not iface:
         return {'ok': False, 'error': '策略缺少接口名', 'steps': []}
 
-    steps: list[dict[str, Any]] = []
-    timeout = int(getattr(settings, 'QOSMANAGE_CMD_TIMEOUT', 10))
+    if phase == 'apply' and policy.direction == QoSPolicy.Direction.INGRESS:
+        return {
+            'ok': False,
+            'error': '入向 (ingress) 限速尚未实现：需要将流量通过 IFB 重定向到出向再做 HTB / TBF 调度',
+            'hint': '若仅需限速，可先在「编辑策略」中改为 egress 方向；ingress 实现将在后续版本提供',
+            'steps': [],
+        }
 
     if phase == 'preview':
         return render_preview(policy)
 
+    steps: list[dict[str, Any]] = []
+    timeout = int(getattr(settings, 'QOSMANAGE_CMD_TIMEOUT', 10))
+
     for clear in build_clear_commands(iface):
         res = _run_with_prefix(clear, timeout=timeout)
+        ok = res.ok or _is_benign_clear_stderr(res.stderr)
         steps.append(
             {
                 'step': 'clear',
                 'cmd': _quote_cmd(clear),
-                'ok': res.ok,
+                'ok': ok,
                 'exit_code': res.exit_code,
                 'stderr': res.stderr,
                 'stdout': res.stdout,
+                'note': '幂等：接口本来没有 root qdisc，已忽略' if (not res.ok and ok) else '',
             }
         )
 
     if phase == 'clear':
-        return {'ok': True, 'phase': 'clear', 'steps': steps}
+        all_ok = all(s['ok'] for s in steps) or not steps
+        return {'ok': all_ok, 'phase': 'clear', 'steps': steps}
 
-    for argv in build_commands(policy):
+    cmds = build_commands(policy)
+    for argv in cmds:
         res = _run_with_prefix(argv, timeout=timeout)
         steps.append(
             {
@@ -200,15 +225,17 @@ def apply_policy(policy: QoSPolicy, *, phase: Phase = 'apply') -> dict[str, Any]
         if not res.ok:
             return {
                 'ok': False,
-                'error': f'命令失败：{_quote_cmd(argv)} -> {res.stderr or res.stdout}',
+                'error': f'命令失败：{_quote_cmd(argv)}  ->  {(res.stderr or res.stdout).strip()}',
+                'hint': '常见原因：接口名错误 / 接口尚未存在 / 内核未加载 sch_htb 或 sch_tbf 模块 / 没有 CAP_NET_ADMIN 权限',
                 'steps': steps,
-                'commands': [_quote_cmd(c) for c in build_commands(policy)],
+                'commands': [_quote_cmd(c) for c in cmds],
             }
     return {
         'ok': True,
         'phase': phase,
+        'effective_rate_mbps': int(policy.effective_rate_mbps),
         'steps': steps,
-        'commands': [_quote_cmd(c) for c in build_commands(policy)],
+        'commands': [_quote_cmd(c) for c in cmds],
     }
 
 

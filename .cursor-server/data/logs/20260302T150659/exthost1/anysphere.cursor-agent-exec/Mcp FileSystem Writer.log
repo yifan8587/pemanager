@@ -1,4 +1,0 @@
-2026-03-02 15:07:04.667 [info] Constructor: scheduling initial write
-2026-03-02 15:07:04.759 [info] fetchAndWrite: lease returned 33 tools across 1 clients
-2026-03-02 15:07:05.743 [info] fetchAndWrite clients: cursor-ide-browser(status=connected,tools=0,res=0)
-2026-03-02 15:07:05.800 [info] Incremental write: 1 changed, 0 removed, 0 unchanged

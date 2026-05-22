@@ -1,0 +1,2 @@
+2026-05-21 02:56:46.479 [info] [cursor-agent-worker] Activating
+2026-05-21 02:56:46.480 [info] [cursor-agent-worker] Disabled by feature gate "enable_cursor_agent_worker_extension"

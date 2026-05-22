@@ -1,0 +1,157 @@
+<script setup>
+import { onMounted, reactive, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import { Document } from '@element-plus/icons-vue'
+import { logApi } from '../../api/logApi'
+import JsonBlock from '../../components/JsonBlock.vue'
+import PageHeader from '../../components/PageHeader.vue'
+
+const tab = ref('app')
+
+const appFilters = reactive({ app: '', level: '', search: '', since: '', until: '' })
+const appLogs = ref([])
+const appLoading = ref(false)
+async function loadAppLogs() {
+  appLoading.value = true
+  try {
+    const params = {}
+    if (appFilters.app) params.app = appFilters.app
+    if (appFilters.level) params.level = appFilters.level
+    if (appFilters.search) params.search = appFilters.search
+    if (appFilters.since) params.since = appFilters.since
+    if (appFilters.until) params.until = appFilters.until
+    appLogs.value = await logApi.listAppLogs(params)
+  } catch (e) {
+    ElMessage.error('加载失败')
+  } finally {
+    appLoading.value = false
+  }
+}
+
+const journalForm = reactive({
+  unit: '',
+  since: '',
+  until: '',
+  grep: '',
+  priority: '',
+  lines: 200,
+})
+const journalResult = ref(null)
+const journalLoading = ref(false)
+const units = ref([])
+
+async function loadUnits() {
+  try {
+    const r = await logApi.listUnits('*')
+    units.value = r.units || []
+  } catch {
+    units.value = []
+  }
+}
+
+async function queryJournal() {
+  journalLoading.value = true
+  try {
+    journalResult.value = await logApi.queryJournal({
+      ...journalForm,
+      lines: Number(journalForm.lines || 200),
+    })
+  } catch (e) {
+    ElMessage.error(e?.message || '查询失败')
+  } finally {
+    journalLoading.value = false
+  }
+}
+
+const detailDrawer = ref(false)
+const detailRow = ref(null)
+function openDetail(row) {
+  detailRow.value = row
+  detailDrawer.value = true
+}
+
+onMounted(() => {
+  loadAppLogs()
+  loadUnits()
+})
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader
+      title="日志中心"
+      description="应用操作日志检索 + systemd journal 查询"
+      :icon="Document"
+    />
+    <el-tabs v-model="tab" type="border-card">
+      <el-tab-pane label="应用操作日志" name="app">
+        <div class="row">
+          <el-input v-model="appFilters.app" placeholder="app" clearable style="width: 140px" />
+          <el-select v-model="appFilters.level" clearable placeholder="级别" style="width: 120px">
+            <el-option label="debug" value="debug" />
+            <el-option label="info" value="info" />
+            <el-option label="warning" value="warning" />
+            <el-option label="error" value="error" />
+          </el-select>
+          <el-input v-model="appFilters.search" placeholder="搜索 summary/actor/target" clearable style="width: 240px" />
+          <el-date-picker v-model="appFilters.since" type="datetime" placeholder="since" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 200px" />
+          <el-date-picker v-model="appFilters.until" type="datetime" placeholder="until" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 200px" />
+          <el-button type="primary" :loading="appLoading" @click="loadAppLogs">查询</el-button>
+        </div>
+        <el-table :data="appLogs" border size="small" v-loading="appLoading" style="margin-top: 8px">
+          <el-table-column prop="created_at" label="时间" width="180" />
+          <el-table-column prop="app" label="app" width="120" />
+          <el-table-column prop="category" label="category" width="120" />
+          <el-table-column prop="level" label="级别" width="80">
+            <template #default="{ row }">
+              <el-tag :type="row.level === 'error' ? 'danger' : row.level === 'warning' ? 'warning' : 'info'" size="small">
+                {{ row.level }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="actor" label="actor" width="120" />
+          <el-table-column prop="summary" label="摘要" min-width="240" show-overflow-tooltip />
+          <el-table-column prop="target" label="对象" width="160" show-overflow-tooltip />
+          <el-table-column label="操作" width="80" fixed="right">
+            <template #default="{ row }">
+              <el-button link size="small" @click="openDetail(row)">详情</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+
+      <el-tab-pane label="systemd journal" name="journal">
+        <div class="row">
+          <el-select v-model="journalForm.unit" placeholder="unit (空=全局)" filterable clearable allow-create style="width: 280px">
+            <el-option v-for="u in units" :key="u.unit" :label="u.unit" :value="u.unit" />
+          </el-select>
+          <el-select v-model="journalForm.priority" clearable placeholder="优先级" style="width: 120px">
+            <el-option v-for="p in ['emerg','alert','crit','err','warning','notice','info','debug']" :key="p" :label="p" :value="p" />
+          </el-select>
+          <el-input v-model="journalForm.grep" placeholder="--grep 关键词" clearable style="width: 240px" />
+          <el-input v-model="journalForm.since" placeholder="since (如 1 hour ago)" clearable style="width: 200px" />
+          <el-input v-model="journalForm.until" placeholder="until (可空)" clearable style="width: 200px" />
+          <el-input-number v-model="journalForm.lines" :min="10" :max="2000" :step="50" />
+          <el-button type="primary" :loading="journalLoading" @click="queryJournal">查询 journalctl</el-button>
+        </div>
+        <el-alert v-if="journalResult && !journalResult.ok" type="warning" :title="journalResult.error" show-icon style="margin-top: 8px" />
+        <el-table v-if="journalResult?.ok" :data="journalResult.entries" border size="small" style="margin-top: 8px" :max-height="520">
+          <el-table-column prop="ts_iso_utc" label="时间(UTC)" width="200" />
+          <el-table-column prop="priority" label="prio" width="60" />
+          <el-table-column prop="identifier" label="identifier" width="140" />
+          <el-table-column prop="unit" label="unit" width="180" show-overflow-tooltip />
+          <el-table-column prop="message" label="message" show-overflow-tooltip />
+        </el-table>
+      </el-tab-pane>
+    </el-tabs>
+
+    <el-drawer v-model="detailDrawer" title="日志详情" size="50%">
+      <JsonBlock v-if="detailRow" :data="detailRow" :rows="28" />
+    </el-drawer>
+  </div>
+</template>
+
+<style scoped>
+.page { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+</style>

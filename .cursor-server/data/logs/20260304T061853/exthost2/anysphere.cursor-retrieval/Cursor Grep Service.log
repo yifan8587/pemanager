@@ -1,4 +1,0 @@
-2026-03-04 07:34:29.668 [info] 	crepectlPath: <NOT FOUND>
-2026-03-04 07:34:29.668 [error] crepectl binary not found in production build; disabling grep service
-2026-03-04 11:16:22.207 [info] FileSystemWatcherService: Disposing filesystem watcher...
-2026-03-04 11:16:22.207 [info] FileSystemWatcherService: Filesystem watcher disposed

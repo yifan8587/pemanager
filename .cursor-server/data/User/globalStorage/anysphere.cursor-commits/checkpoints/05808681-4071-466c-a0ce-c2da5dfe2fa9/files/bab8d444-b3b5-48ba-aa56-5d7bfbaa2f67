@@ -1,0 +1,183 @@
+"""
+WireGuard 接口路由的「单独下发」。
+
+为何独立：
+- WG 接口的 netplan 规格里包含 keys.private，不应被 routemanage 的路由片段重复写入；
+- 因此 WG 相关的 DesiredRouteConfig 不进入 99-pemanager-routes.yaml，而是通过 `ip route` 直接下发到内核；
+- 持久化由 interfacemanage 的 WG 模块（99-pemanager-wireguard.yaml）+ 本模块在 networkd-dispatcher routable.d 中
+  托管的 `pemanager-wg-routes.sh` 协同完成（脚本会在 wg 接口 up 后重放 ip route）。
+"""
+from __future__ import annotations
+
+import os
+from typing import Any, Iterable
+
+from django.conf import settings
+
+from interfacemanage.models import DesiredTunnelConfig
+from interfacemanage.services.netplan_writing import _run as _elevated_run
+
+from routemanage.models import DesiredRouteConfig
+
+DEFAULT_WG_SCRIPT_PATH = '/etc/networkd-dispatcher/routable.d/91-pemanager-wg-routes.sh'
+
+
+def _wg_ifnames() -> set[str]:
+    return set(
+        DesiredTunnelConfig.objects.filter(
+            kind=DesiredTunnelConfig.Kind.WIREGUARD
+        ).values_list('ifname', flat=True)
+    )
+
+
+def wireguard_route_intents() -> list[DesiredRouteConfig]:
+    """筛选出与 WG 接口绑定的路由意图。"""
+    wgs = _wg_ifnames()
+    if not wgs:
+        return []
+    return list(
+        DesiredRouteConfig.objects.filter(interface_name__in=wgs).order_by(
+            'interface_name', 'dest_cidr', 'id'
+        )
+    )
+
+
+def non_wireguard_route_intents() -> list[DesiredRouteConfig]:
+    """所有非 WG 接口的路由意图（走 netplan 持久化）。"""
+    wgs = _wg_ifnames()
+    qs = DesiredRouteConfig.objects.all().order_by('interface_name', 'dest_cidr', 'id')
+    if not wgs:
+        return list(qs)
+    return [r for r in qs if (r.interface_name or '').strip() not in wgs]
+
+
+def _route_to_argv(rec: DesiredRouteConfig) -> list[str] | None:
+    ifn = (rec.interface_name or '').strip()
+    dst = (rec.dest_cidr or '').strip()
+    if not ifn or not dst:
+        return None
+    argv = ['ip']
+    if ':' in dst:
+        argv.append('-6')
+    elif dst.lower() == 'default':
+        pass
+    else:
+        argv.append('-4')
+    argv += ['route', 'replace', dst]
+    if rec.gateway:
+        argv += ['via', str(rec.gateway)]
+    argv += ['dev', ifn]
+    if rec.on_link:
+        argv += ['onlink']
+    if rec.metric is not None:
+        argv += ['metric', str(int(rec.metric))]
+    if rec.route_table is not None:
+        argv += ['table', str(int(rec.route_table))]
+    return argv
+
+
+def render_wg_route_commands(rules: Iterable[DesiredRouteConfig]) -> list[str]:
+    out: list[str] = []
+    for r in rules:
+        argv = _route_to_argv(r)
+        if argv is None:
+            continue
+        out.append(' '.join(argv))
+    return out
+
+
+def render_wg_routes_script() -> str:
+    rules = wireguard_route_intents()
+    lines = [
+        '#!/bin/sh',
+        '# Managed by PE Manager — WireGuard route reapply on interface up.',
+        '# Triggered by networkd-dispatcher (routable.d).',
+        'set -u',
+        'iface="${1:-}"',
+        ': "${iface:=$IFACE}"',
+        '',
+    ]
+    wgs = _wg_ifnames()
+    for ifn in sorted(wgs):
+        rules_for = [r for r in rules if (r.interface_name or '').strip() == ifn]
+        if not rules_for:
+            continue
+        lines.append(f'if [ "$iface" = "{ifn}" ]; then')
+        for r in rules_for:
+            argv = _route_to_argv(r)
+            if argv is None:
+                continue
+            lines.append('  ' + ' '.join(argv) + ' 2>/dev/null || true')
+        lines.append('fi')
+        lines.append('')
+    return '\n'.join(lines) + '\n'
+
+
+def preview_wg_routes() -> dict[str, Any]:
+    rules = wireguard_route_intents()
+    return {
+        'ok': True,
+        'count': len(rules),
+        'commands': render_wg_route_commands(rules),
+        'script_path': str(getattr(settings, 'ROUTEMANAGE_WG_ROUTES_SCRIPT_PATH', DEFAULT_WG_SCRIPT_PATH)),
+        'script': render_wg_routes_script(),
+    }
+
+
+def _write_script_file(path: str, body: str) -> None:
+    os.makedirs(os.path.dirname(path) or '/etc', exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(body)
+    try:
+        os.chmod(path, 0o755)
+    except OSError:
+        pass
+
+
+def apply_wg_routes(*, write_script: bool = True) -> dict[str, Any]:
+    """逐条 `ip route replace` 下发；可选写入 networkd-dispatcher 持久化脚本。"""
+    if not getattr(settings, 'ROUTEMANAGE_IPROUTE_WRITE_ENABLED', False):
+        return {'ok': False, 'error': 'WG 路由下发已关闭（settings.ROUTEMANAGE_IPROUTE_WRITE_ENABLED）'}
+
+    rules = wireguard_route_intents()
+    steps: list[dict[str, Any]] = []
+    ok_count = 0
+    failed: list[dict[str, Any]] = []
+    for r in rules:
+        argv = _route_to_argv(r)
+        if argv is None:
+            continue
+        res = _elevated_run(argv, timeout_kind='apply')
+        steps.append(
+            {
+                'step': 'route replace',
+                'argv': argv,
+                'rule_id': str(r.id),
+                'ifname': r.interface_name,
+                'ok': res.ok,
+                'stderr': res.stderr,
+            }
+        )
+        if res.ok:
+            ok_count += 1
+        else:
+            failed.append({'rule_id': str(r.id), 'stderr': res.stderr})
+
+    script_step: dict[str, Any] | None = None
+    if write_script:
+        path = str(getattr(settings, 'ROUTEMANAGE_WG_ROUTES_SCRIPT_PATH', DEFAULT_WG_SCRIPT_PATH))
+        body = render_wg_routes_script()
+        try:
+            _write_script_file(path, body)
+            script_step = {'step': 'write persistence script', 'path': path, 'ok': True, 'bytes': len(body)}
+        except OSError as exc:
+            script_step = {'step': 'write persistence script', 'path': path, 'ok': False, 'stderr': str(exc)}
+        steps.append(script_step)
+
+    return {
+        'ok': not failed and (script_step is None or script_step.get('ok', True)),
+        'applied': ok_count,
+        'failed': failed,
+        'steps': steps,
+        'script_written': bool(script_step and script_step.get('ok')),
+    }

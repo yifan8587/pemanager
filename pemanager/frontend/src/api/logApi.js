@@ -9,12 +9,20 @@ function unwrapList(data) {
 export const logApi = {
   health: () => http.get('/api/logmanage/health/'),
 
-  listAppLogs: (params) => http.get('/api/logmanage/app-logs/', { params }).then((r) => unwrapList(r.data)),
+  listAppLogs: (params) =>
+    http.get('/api/logmanage/app-logs/', { params }).then((r) => ({
+      list: unwrapList(r.data),
+      count: r.data?.count ?? unwrapList(r.data).length,
+    })),
   appLogDetail: (id) => http.get(`/api/logmanage/app-logs/${id}/`).then((r) => r.data),
 
-  queryJournal: (params) => http.get('/api/logmanage/journal/query/', { params }).then((r) => r.data),
-  listUnits: (pattern) =>
-    http
-      .get('/api/logmanage/journal/units/', { params: pattern ? { pattern } : {} })
-      .then((r) => r.data),
+  logMeta: () => http.get('/api/logmanage/app-logs/meta/').then((r) => r.data),
+  logStats: (params) =>
+    http.get('/api/logmanage/app-logs/stats/', { params }).then((r) => r.data),
+
+  /** 返回完整 URL（前端用 anchor download） */
+  exportCsvUrl: (params = {}) => {
+    const qs = new URLSearchParams(params).toString()
+    return `/api/logmanage/app-logs/export-csv/${qs ? `?${qs}` : ''}`
+  },
 }

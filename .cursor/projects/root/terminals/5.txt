@@ -1,5 +1,5 @@
 ---
-pid: 744981
+pid: 167027
 cwd: /root/pemanager/frontend
 active_command: npm run dev
 last_command: cd pemanager/frontend/
@@ -12,12 +12,75 @@ root@10ghk-web:~/pemanager/frontend# npm run dev
 > vite
 
 
-  VITE v5.4.21  ready in 592 ms
+  VITE v5.4.21  ready in 657 ms
 
   ➜  Local:   http://localhost:5173/
   ➜  Network: http://10.0.20.2:5173/
   ➜  Network: http://10.0.0.1:5173/
-  ➜  Network: http://10.1.1.1:5173/
-  ➜  Network: http://10.200.0.1:5173/
   ➜  Network: http://10.200.0.5:5173/
+  ➜  Network: http://10.10.2.5:5173/
+  ➜  Network: http://10.21.0.5:5173/
   ➜  press h + enter to show help
+3:42:10 AM [vite] hmr update /src/views/resource/ResourceBandwidth.vue
+3:56:16 AM [vite] hmr update /src/views/HomeView.vue, /src/views/route/RouteStatic.vue, /src/views/interface/InterfaceTunnelDesired.vue, /src/views/interface/InterfaceLive.vue, /src/views/resource/ResourceIpAddresses.vue, /src/views/interface/InterfaceLiveDetail.vue, /src/views/operation/OperationMonitorCharts.vue, /src/views/qos/QosPolicies.vue, /src/views/firewall/FirewallRules.vue, /src/views/operation/OperationMonitorTargets.vue
+3:56:28 AM [vite] hmr update /src/views/HomeView.vue, /src/views/route/RouteStatic.vue, /src/views/route/RoutePolicy.vue
+3:56:44 AM [vite] hmr update /src/views/log/LogCenter.vue, /src/views/system/SystemUsers.vue, /src/views/system/SystemProfile.vue, /src/views/system/SystemTokens.vue, /src/views/operation/OperationMonitorTargets.vue
+3:57:08 AM [vite] hmr update /src/views/interface/InterfaceTunnelDesired.vue
+3:57:23 AM [vite] hmr update /src/views/interface/InterfaceTunnelDesired.vue (x2)
+3:57:40 AM [vite] hmr update /src/views/route/RouteStatic.vue
+3:57:48 AM [vite] hmr update /src/views/route/RouteStatic.vue (x2)
+3:58:00 AM [vite] hmr update /src/views/route/RouteStatic.vue (x3)
+3:58:12 AM [vite] hmr update /src/views/route/RouteStatic.vue?vue&type=style&index=0&scoped=a2072909&lang.css
+3:58:33 AM [vite] hmr update /src/views/route/RoutePolicy.vue
+3:58:42 AM [vite] hmr update /src/views/route/RoutePolicy.vue (x2)
+3:58:58 AM [vite] hmr update /src/views/route/RoutePolicy.vue?vue&type=style&index=0&scoped=fbbe6ca3&lang.css
+3:59:29 AM [vite] hmr update /src/views/operation/OperationMonitorTargets.vue
+3:59:36 AM [vite] hmr update /src/views/operation/OperationMonitorTargets.vue (x2)
+3:59:48 AM [vite] hmr update /src/views/operation/OperationMonitorTargets.vue (x3)
+3:59:56 AM [vite] hmr update /src/views/operation/OperationMonitorTargets.vue (x4)
+4:00:14 AM [vite] hmr update /src/views/operation/OperationMonitorCharts.vue
+4:00:22 AM [vite] hmr update /src/views/operation/OperationMonitorCharts.vue (x2)
+6:04:54 AM [vite] hmr update /src/views/interface/InterfaceLive.vue
+6:05:03 AM [vite] hmr update /src/views/interface/InterfaceLive.vue (x2)
+6:05:12 AM [vite] hmr update /src/views/interface/InterfaceLive.vue (x3)
+6:05:19 AM [vite] hmr update /src/views/interface/InterfaceLive.vue (x4)
+6:05:30 AM [vite] hmr update /src/views/interface/InterfaceLive.vue?vue&type=style&index=0&scoped=0f4f5864&lang.css
+6:05:53 AM [vite] hmr update /src/views/interface/InterfaceLiveDetail.vue
+6:06:00 AM [vite] hmr update /src/views/interface/InterfaceLiveDetail.vue (x2)
+6:06:08 AM [vite] hmr update /src/views/interface/InterfaceLiveDetail.vue (x3)
+6:07:03 AM [vite] http proxy error: /api/interfacemanage/interfaces/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:03 AM [vite] http proxy error: /api/resourcemanage/ip-addresses/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:03 AM [vite] http proxy error: /api/resourcemanage/bandwidth-allocations/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:03 AM [vite] http proxy error: /api/interfacemanage/db/desired-tunnels/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:03 AM [vite] http proxy error: /api/interfacemanage/db/drift/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/csrf/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/accountmanage/auth/me/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/interfacemanage/interfaces/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/resourcemanage/bandwidth-allocations/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/resourcemanage/ip-addresses/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/interfacemanage/db/desired-tunnels/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)
+6:07:11 AM [vite] http proxy error: /api/interfacemanage/db/drift/
+Error: connect ECONNREFUSED 127.0.0.1:8000
+    at TCPConnectWrap.afterConnect [as oncomplete] (node:net:1549:16)

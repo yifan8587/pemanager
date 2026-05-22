@@ -115,3 +115,13 @@
 2026-05-19 08:27:42.184 [warning] RequestStore#acceptReply was called without receiving a matching request 106
 2026-05-19 08:27:42.185 [warning] RequestStore#acceptReply was called without receiving a matching request 107
 2026-05-19 08:27:42.185 [warning] RequestStore#acceptReply was called without receiving a matching request 108
+2026-05-19 09:07:44.941 [warning] [File Watcher (node.js)] Watcher shutdown because watched path got deleted
+2026-05-19 09:07:44.942 [warning] [File Watcher (node.js)] Watcher shutdown because watched path got deleted
+2026-05-19 09:32:07.740 [info] [<unknown>][c859bf55][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...
+2026-05-19 12:31:40.222 [info] [<unknown>][70ea7d24][ExtensionHostConnection] <744408> Extension Host Process exited with code: 0, signal: null.
+2026-05-19 12:31:40.225 [info] Last EH closed, waiting before shutting down
+2026-05-19 12:31:40.230 [error] Error: Unexpected SIGPIPE
+    at process.<anonymous> (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:179:1092)
+    at process.emit (node:events:530:35)
+2026-05-19 12:32:11.618 [info] [<unknown>][c859bf55][ManagementConnection] The reconnection grace time of 3h has expired, so the connection will be disposed.
+2026-05-19 12:36:40.227 [info] Last EH closed, shutting down

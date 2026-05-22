@@ -1,0 +1,215 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Plus, RefreshRight, User } from '@element-plus/icons-vue'
+import { accountApi } from '../../api/accountApi'
+import { resourceApi } from '../../api/resourceApi'
+import PageHeader from '../../components/PageHeader.vue'
+import { formatDateTimeTz } from '../../utils/format'
+
+const filters = reactive({ role: '', customer_code: '', search: '' })
+const list = ref([])
+const customers = ref([])
+const loading = ref(false)
+
+async function loadAll() {
+  loading.value = true
+  try {
+    const [u, c] = await Promise.all([
+      accountApi.listUsers({ ...filters }),
+      resourceApi.listCustomers ? resourceApi.listCustomers() : Promise.resolve([]),
+    ])
+    list.value = u
+    customers.value = c
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+const dialog = reactive({ visible: false, mode: 'create', form: null })
+function openCreate() {
+  dialog.mode = 'create'
+  dialog.form = {
+    username: '', email: '', role: 'customer', password: '',
+    customer_code: '', is_active: true, phone: '', remark: '',
+  }
+  dialog.visible = true
+}
+function openEdit(row) {
+  dialog.mode = 'edit'
+  dialog.form = {
+    id: row.id,
+    username: row.username,
+    email: row.email,
+    role: row.role,
+    customer_code: row.customer_code || '',
+    is_active: row.is_active,
+    phone: row.phone || '',
+    remark: row.remark || '',
+    password: '',
+  }
+  dialog.visible = true
+}
+
+async function submit() {
+  const f = dialog.form
+  const body = {
+    username: f.username,
+    email: f.email,
+    role: f.role,
+    customer_code: f.customer_code || null,
+    is_active: f.is_active,
+    phone: f.phone,
+    remark: f.remark,
+  }
+  if (f.password) body.password = f.password
+  try {
+    if (dialog.mode === 'create') await accountApi.createUser(body)
+    else await accountApi.patchUser(f.id, body)
+    ElMessage.success('已保存')
+    dialog.visible = false
+    loadAll()
+  } catch (e) {
+    ElMessage.error(JSON.stringify(e?.response?.data || e?.message || 'failed'))
+  }
+}
+
+async function del(row) {
+  try {
+    await ElMessageBox.confirm(`确认删除用户 ${row.username}？`, '提示', { type: 'warning' })
+    await accountApi.deleteUser(row.id)
+    ElMessage.success('已删除')
+    loadAll()
+  } catch {/* cancel */}
+}
+
+async function toggleActive(row) {
+  try {
+    if (row.is_active) await accountApi.disableUser(row.id)
+    else await accountApi.enableUser(row.id)
+    loadAll()
+  } catch (e) { ElMessage.error('操作失败') }
+}
+
+async function resetPwd(row) {
+  try {
+    const r = await ElMessageBox.prompt(`为 ${row.username} 设置新密码（≥8 位）`, '重置密码', {
+      inputPattern: /.{8,}/,
+      inputErrorMessage: '至少 8 位',
+    })
+    await accountApi.resetPassword(row.id, r.value)
+    ElMessage.success('已重置')
+  } catch {/* cancel */}
+}
+
+const roleTag = (r) => (r === 'admin' ? 'danger' : r === 'operator' ? 'warning' : 'success')
+
+onMounted(loadAll)
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader title="账号管理" :icon="User"
+      description="新增 / 编辑 / 禁用账号；客户账号必须绑定客户后才能登录使用。仅管理员可见。">
+      <template #actions>
+        <el-button :icon="RefreshRight" @click="loadAll">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新增账号</el-button>
+      </template>
+    </PageHeader>
+
+    <el-card shadow="never">
+      <div class="row">
+        <el-select v-model="filters.role" placeholder="角色" clearable style="width: 140px">
+          <el-option label="管理员 admin" value="admin" />
+          <el-option label="运维 operator" value="operator" />
+          <el-option label="客户 customer" value="customer" />
+        </el-select>
+        <el-select v-model="filters.customer_code" placeholder="客户" clearable filterable style="width: 200px">
+          <el-option v-for="c in customers" :key="c.code" :label="`${c.code} (${c.name})`" :value="c.code" />
+        </el-select>
+        <el-input v-model="filters.search" placeholder="用户名 / 邮箱搜索" clearable style="width: 240px" />
+        <el-button type="primary" @click="loadAll">查询</el-button>
+      </div>
+      <el-table :data="list" border size="small" v-loading="loading" style="margin-top: 8px">
+        <el-table-column prop="username" label="用户名" width="160" />
+        <el-table-column label="角色" width="110">
+          <template #default="{ row }">
+            <el-tag :type="roleTag(row.role)" size="small">{{ row.role }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="绑定客户" width="200">
+          <template #default="{ row }">
+            <span v-if="row.customer_code">{{ row.customer_code }} <span class="muted">({{ row.customer_name }})</span></span>
+            <span v-else class="muted">—</span>
+          </template>
+        </el-table-column>
+        <el-table-column prop="email" label="邮箱" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="phone" label="手机" width="120" />
+        <el-table-column label="启用" width="80">
+          <template #default="{ row }">
+            <el-switch :model-value="row.is_active" @change="toggleActive(row)" />
+          </template>
+        </el-table-column>
+        <el-table-column label="最近登录" width="200">
+          <template #default="{ row }">{{ formatDateTimeTz(row.last_login) }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="220" fixed="right">
+          <template #default="{ row }">
+            <el-button link size="small" @click="openEdit(row)">编辑</el-button>
+            <el-button link size="small" type="warning" @click="resetPwd(row)">重置密码</el-button>
+            <el-button link size="small" type="danger" @click="del(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <el-dialog v-model="dialog.visible" :title="dialog.mode === 'create' ? '新增账号' : '编辑账号'" width="520px">
+      <el-form v-if="dialog.form" label-width="100px">
+        <el-form-item label="用户名">
+          <el-input v-model="dialog.form.username" :disabled="dialog.mode === 'edit'" />
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="dialog.form.role">
+            <el-option label="管理员 admin" value="admin" />
+            <el-option label="运维 operator" value="operator" />
+            <el-option label="客户 customer" value="customer" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="绑定客户">
+          <el-select v-model="dialog.form.customer_code" clearable filterable
+            :disabled="dialog.form.role !== 'customer'"
+            placeholder="客户角色必填">
+            <el-option v-for="c in customers" :key="c.code" :label="`${c.code} (${c.name})`" :value="c.code" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="邮箱">
+          <el-input v-model="dialog.form.email" />
+        </el-form-item>
+        <el-form-item label="手机">
+          <el-input v-model="dialog.form.phone" />
+        </el-form-item>
+        <el-form-item label="密码" v-if="dialog.mode === 'create'">
+          <el-input v-model="dialog.form.password" show-password placeholder="至少 8 位" />
+        </el-form-item>
+        <el-form-item label="启用">
+          <el-switch v-model="dialog.form.is_active" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="dialog.form.remark" type="textarea" :rows="2" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dialog.visible = false">取消</el-button>
+        <el-button type="primary" @click="submit">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+.muted { color: var(--el-text-color-secondary); }
+</style>

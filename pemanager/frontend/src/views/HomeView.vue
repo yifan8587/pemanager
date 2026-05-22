@@ -55,6 +55,9 @@ async function load() {
     safe(() => logApi.listAppLogs({}), []),
   ])
 
+  // logApi.listAppLogs 在分页时会返回 {count, results: [...]}; 没分页时是数组
+  const logList = Array.isArray(logs) ? logs : (logs?.results || [])
+
   const ipState = rs?.ip_by_state || {}
   bwPools.value = rs?.bandwidth_pools || []
   ifaceSummary.value = ifa?.summary || {}
@@ -72,15 +75,16 @@ async function load() {
 
   modules.value = [
     { name: '接口管理', path: '/interfacemanage/live', status: ifa ? 'ok' : 'err', detail: `${stats.value.interfaces} 个接口` },
-    { name: '静态路由', path: '/routemanage/desired-routes', status: 'ok', detail: `${stats.value.routes} 条意图` },
+    { name: '静态路由', path: '/routemanage/static-routes', status: 'ok', detail: `${stats.value.routes} 条意图` },
+    { name: '策略路由', path: '/routemanage/policy-rules', status: 'ok', detail: 'ip rule' },
     { name: '资源管理', path: '/resourcemanage/summary', status: 'ok', detail: `IP ${stats.value.ips_alloc} 已分配 / ${stats.value.ips_avail} 可用` },
     { name: 'QoS 策略', path: '/qosmanage/policies', status: 'ok', detail: `${stats.value.qos} 条策略` },
     { name: '防火墙', path: '/firewallmanage/rules', status: 'ok', detail: `${stats.value.fw} 条规则` },
-    { name: '运维监控', path: '/operationmanage/monitor-targets', status: 'ok', detail: `${stats.value.monitors} 个监控目标` },
-    { name: '日志中心', path: '/logmanage/center', status: 'ok', detail: `${logs.length} 条最近日志` },
+    { name: '品质监控', path: '/operationmanage/monitor-targets', status: 'ok', detail: `${stats.value.monitors} 个监控目标` },
+    { name: '日志中心', path: '/logmanage/center', status: 'ok', detail: `${logList.length} 条最近日志` },
   ]
 
-  recentLogs.value = (logs || []).slice(0, 8)
+  recentLogs.value = logList.slice(0, 8)
 
   loading.value = false
 }
@@ -109,7 +113,7 @@ function bwTone(p) {
         <StatCard label="接口" :value="stats.interfaces" :icon="Connection" tone="primary" to="/interfacemanage/live" />
       </el-col>
       <el-col :xs="12" :sm="8" :md="6" :lg="3">
-        <StatCard label="路由意图" :value="stats.routes" :icon="Share" tone="info" to="/routemanage/desired-routes" />
+        <StatCard label="路由意图" :value="stats.routes" :icon="Share" tone="info" to="/routemanage/static-routes" />
       </el-col>
       <el-col :xs="12" :sm="8" :md="6" :lg="3">
         <StatCard label="IP 已分配" :value="stats.ips_alloc" :icon="Coin" tone="success" to="/resourcemanage/ip-addresses" hint="from resourcemanage" />
@@ -127,7 +131,7 @@ function bwTone(p) {
         <StatCard label="防火墙规则" :value="stats.fw" :icon="Lock" tone="danger" to="/firewallmanage/rules" />
       </el-col>
       <el-col :xs="12" :sm="8" :md="6" :lg="3">
-        <StatCard label="监控目标" :value="stats.monitors" :icon="Aim" tone="success" to="/operationmanage/monitor-targets" />
+        <StatCard label="品质监控目标" :value="stats.monitors" :icon="Aim" tone="success" to="/operationmanage/monitor-targets" />
       </el-col>
     </el-row>
 

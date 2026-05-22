@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from interfacemanage.models import DesiredTunnelConfig
 from interfacemanage.services.netplan import index_netplan_interfaces
 
 
@@ -56,6 +57,27 @@ def unify_interfaces(
         str(row['ifname']): row for row in tunnel_parsed if isinstance(row, dict) and row.get('ifname')
     }
 
+    desired_tunnels_by_name: dict[str, dict[str, Any]] = {}
+    try:
+        for obj in DesiredTunnelConfig.objects.all().only(
+            'id', 'ifname', 'kind', 'spec', 'remark', 'updated_at', 'created_at'
+        ):
+            key = (obj.ifname or '').strip()
+            if not key:
+                continue
+            desired_tunnels_by_name[key] = {
+                'id': str(obj.id) if obj.id is not None else None,
+                'ifname': obj.ifname,
+                'kind': obj.kind,
+                'spec': obj.spec or {},
+                'remark': obj.remark or '',
+                'updated_at': obj.updated_at.isoformat() if obj.updated_at else None,
+                'created_at': obj.created_at.isoformat() if obj.created_at else None,
+            }
+    except Exception:
+        # 数据库未就绪 / 模型缺失时不影响接口列表展示
+        desired_tunnels_by_name = {}
+
     rows: list[dict[str, Any]] = []
     for link in links:
         if not isinstance(link, dict):
@@ -99,6 +121,7 @@ def unify_interfaces(
                 'netplan_tunnel_mode': tunnel_mode_np,
                 'wireguard': wg_detail if isinstance(wg_detail, dict) else None,
                 'ip_tunnel_show': tunnel_line,
+                'desired_tunnel': desired_tunnels_by_name.get(name),
             }
         )
 

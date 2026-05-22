@@ -1,0 +1,41 @@
+2026-05-19 15:06:05.834 [info] [main] 日志级别: Info
+2026-05-19 15:06:05.834 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-19 15:06:05.834 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-19 15:06:05.834 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-19 15:06:05.925 [info] > git rev-parse --show-toplevel [77ms] (getRepositoryRoot)
+2026-05-19 15:06:06.904 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [952ms] 
+2026-05-19 15:06:06.925 [info] [Model][openRepository] Opened repository: /root
+2026-05-19 15:06:06.925 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-19 15:06:07.022 [info] > git rev-parse --show-toplevel [58ms] (getRepositoryRoot)
+2026-05-19 15:06:07.023 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-19 15:06:07.024 [info] > git config --get commit.template [65ms] 
+2026-05-19 15:06:07.077 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [23ms] 
+2026-05-19 15:06:07.222 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [58ms] 
+2026-05-19 15:06:07.405 [info] > git show --textconv :pemanager/backend/operationmanage/services/rollup.py [25ms]
+2026-05-19 15:06:07.413 [info] > git ls-files --stage -- pemanager/backend/operationmanage/services/rollup.py [25ms] 
+2026-05-19 15:06:07.422 [info] > git cat-file -s 8d6844617fb94e72c8bc316e9646b787c233018c [2ms] 
+2026-05-19 15:06:07.597 [info] > git check-ignore -v -z --stdin [77ms]
+2026-05-19 15:06:13.007 [info] > git status -z -uall [5851ms] (cancelled)
+2026-05-19 15:06:13.007 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3610ms] 
+2026-05-19 15:06:13.048 [info] > git config --get --local branch.main.vscode-merge-base [29ms] 
+2026-05-19 15:06:13.048 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-19 15:06:13.061 [info] > git config --get commit.template [83ms] 
+2026-05-19 15:06:13.071 [info] > git reflog main --grep-reflog=branch: Created from *. [11ms] 
+2026-05-19 15:06:13.079 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [10ms] 
+2026-05-19 15:06:13.080 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [2ms] 
+2026-05-19 15:06:13.080 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-19 15:06:13.080 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-19 15:06:13.109 [info] > git merge-base refs/heads/main refs/remotes/origin/main [20ms] 
+2026-05-19 15:06:13.118 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [10ms] 
+2026-05-19 15:06:13.120 [info] > git diff --name-status -z --diff-filter=ADMR c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532...refs/remotes/origin/main [3ms] 
+2026-05-19 15:06:18.728 [info] > git status -z -uall [5629ms] (cancelled)
+2026-05-19 15:06:18.740 [info] > git config --global user.name [3ms] 
+2026-05-19 15:06:18.748 [info] > git config --global user.email [2ms] 
+2026-05-19 15:06:18.748 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-19 15:06:27.805 [info] > git check-ignore -v -z --stdin [31ms]
+2026-05-19 15:11:46.826 [info] > git check-ignore -v -z --stdin [34ms]
+2026-05-19 15:11:48.523 [info] > git check-ignore -v -z --stdin [52ms]
+2026-05-19 15:11:50.895 [info] > git check-ignore -v -z --stdin [44ms]
+2026-05-19 15:11:53.094 [info] > git check-ignore -v -z --stdin [49ms]
+2026-05-19 15:38:16.801 [info] > git check-ignore -v -z --stdin [47ms]
+2026-05-19 15:56:48.791 [info] > git check-ignore -v -z --stdin [29ms]

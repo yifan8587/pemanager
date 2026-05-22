@@ -1,0 +1,75 @@
+2026-05-20 14:36:04.606 [info] [main] 日志级别: Info
+2026-05-20 14:36:04.606 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-20 14:36:04.606 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-20 14:36:04.606 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-20 14:36:04.696 [info] > git rev-parse --show-toplevel [57ms] (getRepositoryRoot)
+2026-05-20 14:36:05.701 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [983ms] 
+2026-05-20 14:36:05.720 [info] [Model][openRepository] Opened repository: /root
+2026-05-20 14:36:05.720 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-20 14:36:05.788 [info] > git rev-parse --show-toplevel [48ms] (getRepositoryRoot)
+2026-05-20 14:36:05.789 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-20 14:36:05.790 [info] > git config --get commit.template [55ms] 
+2026-05-20 14:36:06.019 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [28ms] 
+2026-05-20 14:36:06.245 [info] > git show --textconv :pemanager/backend/routemanage/models.py [51ms]
+2026-05-20 14:36:06.248 [info] > git ls-files --stage -- pemanager/backend/routemanage/models.py [48ms] 
+2026-05-20 14:36:06.367 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [91ms] 
+2026-05-20 14:36:06.369 [info] > git cat-file -s 4a556e14dc45328fc1111c07ba7fa3a8b2d7c55f [114ms] 
+2026-05-20 14:36:06.500 [info] > git check-ignore -v -z --stdin [122ms]
+2026-05-20 14:36:06.544 [info] > git blame --root --incremental c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532 -- pemanager/backend/routemanage/models.py [5ms] 
+2026-05-20 14:36:12.411 [info] > git status -z -uall [6142ms] (cancelled)
+2026-05-20 14:36:12.411 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3560ms] 
+2026-05-20 14:36:12.482 [info] > git config --get --local branch.main.vscode-merge-base [58ms] 
+2026-05-20 14:36:12.482 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-20 14:36:12.491 [info] > git config --get commit.template [106ms] 
+2026-05-20 14:36:12.500 [info] > git reflog main --grep-reflog=branch: Created from *. [10ms] 
+2026-05-20 14:36:12.507 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [8ms] 
+2026-05-20 14:36:12.508 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [2ms] 
+2026-05-20 14:36:12.508 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-20 14:36:12.509 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-20 14:36:12.530 [info] > git merge-base refs/heads/main refs/remotes/origin/main [14ms] 
+2026-05-20 14:36:12.540 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [11ms] 
+2026-05-20 14:36:12.541 [info] > git diff --name-status -z --diff-filter=ADMR c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532...refs/remotes/origin/main [2ms] 
+2026-05-20 14:36:17.668 [info] > git status -z -uall [5145ms] (cancelled)
+2026-05-20 14:36:17.670 [info] > git config --global user.name [15ms] 
+2026-05-20 14:36:17.679 [info] > git config --global user.email [2ms] 
+2026-05-20 14:36:17.679 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-20 14:36:18.233 [info] > git check-ignore -v -z --stdin [58ms]
+2026-05-20 14:37:29.195 [info] > git check-ignore -v -z --stdin [44ms]
+2026-05-20 14:37:32.475 [info] > git check-ignore -v -z --stdin [33ms]
+2026-05-20 14:37:35.978 [info] > git check-ignore -v -z --stdin [65ms]
+2026-05-20 14:37:37.847 [info] > git check-ignore -v -z --stdin [41ms]
+2026-05-20 14:37:39.539 [info] > git check-ignore -v -z --stdin [44ms]
+2026-05-20 14:37:41.239 [info] > git check-ignore -v -z --stdin [41ms]
+2026-05-20 14:37:42.755 [info] > git show --textconv :pemanager/frontend/src/views/route/RouteStatic.vue [27ms]
+2026-05-20 14:37:42.766 [info] > git ls-files --stage -- pemanager/frontend/src/views/route/RouteStatic.vue [30ms] 
+2026-05-20 14:37:42.773 [info] > git hash-object -t tree /dev/null [9ms] 
+2026-05-20 14:37:42.774 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:37:42.775 [info] > git hash-object -t tree /dev/null [3ms] 
+2026-05-20 14:37:42.776 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:37:45.545 [info] > git blame --root --incremental c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532 -- pemanager/frontend/src/views/route/RouteStatic.vue [3ms] 
+2026-05-20 14:37:45.546 [info] fatal: no such path pemanager/frontend/src/views/route/RouteStatic.vue in c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532
+2026-05-20 14:38:19.746 [info] > git show --textconv :pemanager/frontend/src/views/route/RoutePolicy.vue [24ms]
+2026-05-20 14:38:19.747 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/frontend/src/views/route/RoutePolicy.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRoutePolicy.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:38:19.750 [info] > git ls-files --stage -- pemanager/frontend/src/views/route/RoutePolicy.vue [23ms] 
+2026-05-20 14:38:19.751 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/frontend/src/views/route/RoutePolicy.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRoutePolicy.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:38:25.684 [info] > git show --textconv :pemanager/frontend/src/views/route/RouteStatic.vue [37ms]
+2026-05-20 14:38:25.685 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:38:25.688 [info] > git ls-files --stage -- pemanager/frontend/src/views/route/RouteStatic.vue [36ms] 
+2026-05-20 14:38:25.688 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:39:10.904 [info] > git show --textconv :pemanager/frontend/src/views/HomeView.vue [29ms]
+2026-05-20 14:39:10.904 [info] > git ls-files --stage -- pemanager/frontend/src/views/HomeView.vue [23ms] 
+2026-05-20 14:39:10.914 [info] > git cat-file -s e612b5564876c38774bb0c78f385ee444419f69d [1ms] 
+2026-05-20 14:39:12.208 [info] > git show --textconv :pemanager/frontend/src/views/route/RoutePolicy.vue [26ms]
+2026-05-20 14:39:12.208 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/frontend/src/views/route/RoutePolicy.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRoutePolicy.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:39:12.211 [info] > git ls-files --stage -- pemanager/frontend/src/views/route/RoutePolicy.vue [22ms] 
+2026-05-20 14:39:12.212 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/frontend/src/views/route/RoutePolicy.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRoutePolicy.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 14:39:13.811 [info] > git blame --root --incremental c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532 -- pemanager/frontend/src/views/route/RoutePolicy.vue [3ms] 
+2026-05-20 14:39:13.811 [info] fatal: no such path pemanager/frontend/src/views/route/RoutePolicy.vue in c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532
+2026-05-20 14:42:31.414 [info] > git check-ignore -v -z --stdin [45ms]
+2026-05-20 16:29:31.126 [info] > git show --textconv :pemanager/frontend/src/views/route/RouteStatic.vue [34ms]
+2026-05-20 16:29:31.128 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 16:29:31.135 [info] > git ls-files --stage -- pemanager/frontend/src/views/route/RouteStatic.vue [35ms] 
+2026-05-20 16:29:31.135 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/frontend/src/views/route/RouteStatic.vue.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Ffrontend%2Fsrc%2Fviews%2Froute%2FRouteStatic.vue%22%2C%22ref%22%3A%22%22%7D
+2026-05-20 16:36:25.556 [info] > git check-ignore -v -z --stdin [33ms]
+2026-05-20 16:36:28.633 [info] > git check-ignore -v -z --stdin [28ms]
+2026-05-20 17:01:10.014 [info] > git check-ignore -v -z --stdin [53ms]

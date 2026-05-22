@@ -1,6 +1,6 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
-import { useRoute } from 'vue-router'
+import { computed, onMounted, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import {
   Fold,
   Expand,
@@ -18,54 +18,109 @@ import {
   Aim,
   TrendCharts,
   Setting,
+  Key,
+  User,
+  SwitchButton,
 } from '@element-plus/icons-vue'
+import { accountApi } from './api/accountApi'
 
 const route = useRoute()
+const router = useRouter()
 const collapsed = ref(false)
 const now = ref(new Date())
 
-const active = computed(() => {
-  return route.path
-})
+// 直接绑定全局响应式 user：登录 / 退出 / 任意调用 setUser 都会立刻刷新顶栏 + 菜单
+const me = accountApi.auth.userRef
+
+const active = computed(() => route.path)
 
 const GROUPS = {
   resourcemanage: '资源管理',
   interfacemanage: '接口管理',
-  routemanage: '网络配置',
+  routemanage: '路由配置',
   qosmanage: 'QoS',
   firewallmanage: '安全防护',
   operationmanage: '运维管理',
-  logmanage: '日志中心',
+  logmanage: '操作日志中心',
+  systemmanage: '系统管理',
 }
 
 const crumbs = computed(() => {
   const matched = route.matched.filter((r) => r.meta?.title)
   const items = matched.map((r) => ({ title: r.meta.title, path: r.path }))
   const seg = route.path.split('/').filter(Boolean)[0]
-  if (seg && GROUPS[seg]) {
-    items.unshift({ title: GROUPS[seg] })
-  }
+  if (seg && GROUPS[seg]) items.unshift({ title: GROUPS[seg] })
   return items
 })
 
-onMounted(() => {
-  setInterval(() => {
-    now.value = new Date()
-  }, 1000)
+// 仅当前 user 拥有的角色（按角色列表过滤菜单）
+const myRoles = computed(() => {
+  if (!me.value) return []
+  if (me.value.is_admin) return ['admin', 'operator', 'customer']
+  if (me.value.is_operator) return ['operator', 'customer']
+  return ['customer']
 })
+const can = (roles) => {
+  if (!Array.isArray(roles)) return true
+  return roles.some((r) => myRoles.value.includes(r))
+}
+const isCustomer = computed(() => !!me.value?.is_customer)
+const isAdmin = computed(() => !!me.value?.is_admin)
+
+// 顶部右上角的用户显示名 + 角色 tag
+const roleLabel = computed(() => {
+  if (!me.value) return '未登录'
+  if (me.value.is_admin) return '管理员'
+  if (me.value.is_operator) return '运维'
+  return '客户'
+})
+const roleTagType = computed(() => {
+  if (!me.value) return 'info'
+  if (me.value.is_admin) return 'danger'
+  if (me.value.is_operator) return 'warning'
+  return 'success'
+})
+
+async function syncMe() {
+  // 有 token 但没 user 信息（典型场景：旧 tab 刚刷新或 localStorage 被清掉但 access 还在），调一次 me 补齐
+  if (accountApi.auth.isAuthed()) {
+    try { await accountApi.me() } catch { /* 401 会被拦截器跳登录 */ }
+  }
+}
+
+onMounted(() => {
+  setInterval(() => { now.value = new Date() }, 1000)
+  syncMe()
+})
+
+// 每次进入主框架（非 /login）都做一次 me 同步，保证菜单与角色始终最新
+watch(
+  () => route.path,
+  (p) => {
+    if (!p.startsWith('/login') && accountApi.auth.isAuthed() && !me.value) {
+      syncMe()
+    }
+  },
+)
 
 function fmtClock(d) {
   const pad = (n) => String(n).padStart(2, '0')
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
 }
 
-function reload() {
-  window.location.reload()
+function reload() { window.location.reload() }
+
+async function logout() {
+  await accountApi.logout()
+  router.replace('/login')
 }
+
+const isLogin = computed(() => route.path.startsWith('/login'))
 </script>
 
 <template>
-  <el-container class="layout">
+  <router-view v-if="isLogin" />
+  <el-container v-else class="layout">
     <el-header class="topbar">
       <div class="brand">
         <el-icon class="brand-icon"><ChromeFilled /></el-icon>
@@ -84,10 +139,35 @@ function reload() {
           <span class="lbl">刷新</span>
         </el-button>
         <el-divider direction="vertical" />
-        <span class="user">
-          <el-icon><Setting /></el-icon>
-          <span class="lbl">管理员</span>
-        </span>
+        <el-dropdown trigger="click">
+          <span class="user">
+            <el-icon><User /></el-icon>
+            <span class="lbl">{{ me?.username || '未登录' }}</span>
+            <el-tag :type="roleTagType" size="small" effect="dark" style="margin-left: 6px">
+              {{ roleLabel }}
+            </el-tag>
+            <span v-if="me?.customer_code" class="user-cust">@ {{ me.customer_code }}</span>
+          </span>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item @click="router.push('/systemmanage/profile')">
+                <el-icon><Setting /></el-icon> 个人信息
+              </el-dropdown-item>
+              <el-dropdown-item @click="router.push('/systemmanage/tokens')">
+                <el-icon><Key /></el-icon> API Token
+              </el-dropdown-item>
+              <el-dropdown-item v-if="isAdmin" @click="router.push('/systemmanage/users')">
+                <el-icon><User /></el-icon> 账号管理
+              </el-dropdown-item>
+              <el-dropdown-item v-if="isAdmin" @click="router.push('/systemmanage/users?create=1')">
+                <el-icon><User /></el-icon> 新增账号
+              </el-dropdown-item>
+              <el-dropdown-item divided @click="logout">
+                <el-icon><SwitchButton /></el-icon> 退出登录
+              </el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </el-header>
 
@@ -109,39 +189,37 @@ function reload() {
             <template #title>系统概览</template>
           </el-menu-item>
 
-          <el-sub-menu index="grp-iface">
+          <el-sub-menu v-if="can(['admin','operator','customer'])" index="grp-iface">
             <template #title>
               <el-icon><Connection /></el-icon>
               <span>接口管理</span>
             </template>
-            <el-menu-item index="/interfacemanage/live">实时接口</el-menu-item>
-            <el-menu-item index="/interfacemanage/db-mirror">配置镜像库</el-menu-item>
-            <el-menu-item index="/interfacemanage/tunnel-config">隧道接口配置</el-menu-item>
-            <el-menu-item index="/interfacemanage/sources">原始采集</el-menu-item>
+            <el-menu-item index="/interfacemanage/live">{{ isCustomer ? '我的接口' : '接口列表' }}</el-menu-item>
+            <el-menu-item v-if="can(['admin','operator'])" index="/interfacemanage/tunnel-config">隧道接口配置</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="grp-net">
+          <el-sub-menu v-if="can(['admin','operator','customer'])" index="grp-net">
             <template #title>
               <el-icon><Share /></el-icon>
-              <span>网络配置</span>
+              <span>路由配置</span>
             </template>
-            <el-menu-item index="/routemanage/desired-routes">静态路由</el-menu-item>
+            <el-menu-item index="/routemanage/static-routes">{{ isCustomer ? '我的路由' : '静态路由' }}</el-menu-item>
+            <el-menu-item v-if="can(['admin','operator'])" index="/routemanage/policy-rules">策略路由</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="grp-resource">
+          <el-sub-menu v-if="can(['admin','operator','customer'])" index="grp-resource">
             <template #title>
               <el-icon><Coin /></el-icon>
               <span>资源管理</span>
             </template>
-            <el-menu-item index="/resourcemanage/summary">资源概览</el-menu-item>
-            <el-menu-item index="/resourcemanage/customers">客户</el-menu-item>
+            <el-menu-item index="/resourcemanage/summary">{{ isCustomer ? '我的资源' : '资源概览' }}</el-menu-item>
+            <el-menu-item v-if="can(['admin','operator'])" index="/resourcemanage/customers">客户</el-menu-item>
             <el-menu-item index="/resourcemanage/ip-addresses">IP 地址</el-menu-item>
             <el-menu-item index="/resourcemanage/bandwidth">带宽</el-menu-item>
-            <el-menu-item index="/resourcemanage/allocation-logs">分配日志</el-menu-item>
-            <el-menu-item index="/resourcemanage/inbound-sync">资源回写</el-menu-item>
+            <el-menu-item v-if="can(['admin','operator'])" index="/resourcemanage/allocation-logs">分配日志</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="grp-qos">
+          <el-sub-menu v-if="can(['admin','operator','customer'])" index="grp-qos">
             <template #title>
               <el-icon><DataAnalysis /></el-icon>
               <span>QoS</span>
@@ -149,7 +227,7 @@ function reload() {
             <el-menu-item index="/qosmanage/policies">QoS 策略</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="grp-sec">
+          <el-sub-menu v-if="can(['admin','operator'])" index="grp-sec">
             <template #title>
               <el-icon><Lock /></el-icon>
               <span>安全防护</span>
@@ -157,29 +235,39 @@ function reload() {
             <el-menu-item index="/firewallmanage/rules">防火墙规则</el-menu-item>
           </el-sub-menu>
 
-          <el-sub-menu index="grp-ops">
+          <el-sub-menu v-if="can(['admin','operator','customer'])" index="grp-ops">
             <template #title>
               <el-icon><Tools /></el-icon>
-              <span>运维管理</span>
+              <span>{{ isCustomer ? '流量图表' : '运维管理' }}</span>
             </template>
-            <el-menu-item index="/operationmanage/tools">
+            <el-menu-item v-if="can(['admin','operator'])" index="/operationmanage/tools">
               <el-icon><Aim /></el-icon>
               <template #title>诊断工具</template>
             </el-menu-item>
-            <el-menu-item index="/operationmanage/monitor-targets">
+            <el-menu-item v-if="can(['admin','operator'])" index="/operationmanage/monitor-targets">
               <el-icon><Cpu /></el-icon>
-              <template #title>监控目标</template>
+              <template #title>品质监控</template>
             </el-menu-item>
             <el-menu-item index="/operationmanage/monitor-charts">
               <el-icon><TrendCharts /></el-icon>
-              <template #title>监控图表</template>
+              <template #title>{{ isCustomer ? '我的流量图' : '监控图表' }}</template>
             </el-menu-item>
           </el-sub-menu>
 
-          <el-menu-item index="/logmanage/center">
+          <el-menu-item v-if="can(['admin','operator'])" index="/logmanage/center">
             <el-icon><Document /></el-icon>
-            <template #title>日志中心</template>
+            <template #title>操作日志中心</template>
           </el-menu-item>
+
+          <el-sub-menu index="grp-sys">
+            <template #title>
+              <el-icon><Setting /></el-icon>
+              <span>系统管理</span>
+            </template>
+            <el-menu-item index="/systemmanage/profile">个人信息</el-menu-item>
+            <el-menu-item index="/systemmanage/tokens">API Token</el-menu-item>
+            <el-menu-item v-if="isAdmin" index="/systemmanage/users">账号管理</el-menu-item>
+          </el-sub-menu>
         </el-menu>
       </el-aside>
 
@@ -264,7 +352,10 @@ function reload() {
   align-items: center;
   gap: 4px;
   font-size: 13px;
+  cursor: pointer;
+  color: var(--pe-header-text);
 }
+.user-cust { margin-left: 6px; opacity: 0.6; font-size: 12px; }
 .lbl { margin-left: 4px; }
 .below { min-height: calc(100vh - 56px); }
 .aside {

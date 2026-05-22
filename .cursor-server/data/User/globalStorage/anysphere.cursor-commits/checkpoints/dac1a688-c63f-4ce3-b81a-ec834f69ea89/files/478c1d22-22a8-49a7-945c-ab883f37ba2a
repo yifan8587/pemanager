@@ -1,0 +1,126 @@
+import { createRouter, createWebHistory } from 'vue-router'
+
+const routes = [
+  {
+    path: '/',
+    name: 'home',
+    component: () => import('../views/HomeView.vue'),
+    meta: { title: '首页' },
+  },
+  { path: '/resourcemanage', redirect: '/resourcemanage/summary' },
+  {
+    path: '/resourcemanage/summary',
+    name: 'resource-summary',
+    component: () => import('../views/resource/ResourceSummary.vue'),
+    meta: { title: '资源概览' },
+  },
+  {
+    path: '/resourcemanage/customers',
+    name: 'resource-customers',
+    component: () => import('../views/resource/ResourceCustomers.vue'),
+    meta: { title: '客户' },
+  },
+  {
+    path: '/resourcemanage/ip-addresses',
+    name: 'resource-ip-addresses',
+    component: () => import('../views/resource/ResourceIpAddresses.vue'),
+    meta: { title: 'IP 地址' },
+  },
+  {
+    path: '/resourcemanage/bandwidth',
+    name: 'resource-bandwidth',
+    component: () => import('../views/resource/ResourceBandwidth.vue'),
+    meta: { title: '带宽' },
+  },
+  {
+    path: '/resourcemanage/allocation-logs',
+    name: 'resource-allocation-logs',
+    component: () => import('../views/resource/ResourceLogs.vue'),
+    meta: { title: '分配日志' },
+  },
+  { path: '/resourcemanage/inbound-sync', redirect: '/resourcemanage/summary' },
+
+  { path: '/interfacemanage', redirect: '/interfacemanage/live' },
+  {
+    path: '/interfacemanage/live',
+    name: 'iface-live',
+    component: () => import('../views/interface/InterfaceLive.vue'),
+    meta: { title: '实时接口' },
+  },
+  {
+    path: '/interfacemanage/live/:ifname',
+    name: 'iface-live-detail',
+    component: () => import('../views/interface/InterfaceLiveDetail.vue'),
+    meta: { title: '接口详情' },
+  },
+  {
+    path: '/interfacemanage/tunnel-config',
+    name: 'iface-tunnel-config',
+    component: () => import('../views/interface/InterfaceTunnelDesired.vue'),
+    meta: { title: '隧道接口配置' },
+  },
+
+  { path: '/routemanage', redirect: '/routemanage/static-routes' },
+  { path: '/routemanage/desired-routes', redirect: '/routemanage/static-routes' },
+  {
+    path: '/routemanage/static-routes',
+    name: 'route-static',
+    component: () => import('../views/route/RouteStatic.vue'),
+    meta: { title: '静态路由' },
+  },
+  {
+    path: '/routemanage/policy-rules',
+    name: 'route-policy',
+    component: () => import('../views/route/RoutePolicy.vue'),
+    meta: { title: '策略路由' },
+  },
+
+  { path: '/qosmanage', redirect: '/qosmanage/policies' },
+  {
+    path: '/qosmanage/policies',
+    name: 'qos-policies',
+    component: () => import('../views/qos/QosPolicies.vue'),
+    meta: { title: 'QoS 策略' },
+  },
+
+  { path: '/firewallmanage', redirect: '/firewallmanage/rules' },
+  {
+    path: '/firewallmanage/rules',
+    name: 'firewall-rules',
+    component: () => import('../views/firewall/FirewallRules.vue'),
+    meta: { title: '防火墙规则' },
+  },
+
+  { path: '/operationmanage', redirect: '/operationmanage/tools' },
+  {
+    path: '/operationmanage/tools',
+    name: 'ops-tools',
+    component: () => import('../views/operation/OperationTools.vue'),
+    meta: { title: '诊断工具' },
+  },
+  {
+    path: '/operationmanage/monitor-targets',
+    name: 'ops-monitor-targets',
+    component: () => import('../views/operation/OperationMonitorTargets.vue'),
+    meta: { title: '品质监控' },
+  },
+  {
+    path: '/operationmanage/monitor-charts',
+    name: 'ops-monitor-charts',
+    component: () => import('../views/operation/OperationMonitorCharts.vue'),
+    meta: { title: '监控图表' },
+  },
+
+  { path: '/logmanage', redirect: '/logmanage/center' },
+  {
+    path: '/logmanage/center',
+    name: 'log-center',
+    component: () => import('../views/log/LogCenter.vue'),
+    meta: { title: '操作日志中心' },
+  },
+]
+
+export default createRouter({
+  history: createWebHistory(),
+  routes,
+})

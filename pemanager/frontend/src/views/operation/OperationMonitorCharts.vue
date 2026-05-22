@@ -1,25 +1,32 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { ElMessage } from 'element-plus'
-import { TrendCharts } from '@element-plus/icons-vue'
+import { TrendCharts, RefreshRight } from '@element-plus/icons-vue'
 import { operationApi } from '../../api/operationApi'
 import { interfaceApi } from '../../api/interfaceApi'
 import EChart from '../../components/EChart.vue'
 import PageHeader from '../../components/PageHeader.vue'
 
 const targets = ref([])
-const ifaces = ref([])
+const monitorIfaces = ref([])
+const allIfaces = ref([])
 
-const targetId = ref('')
-const bucket = ref('hour')
+const bucket = ref('hour') // minute | hour | day（month → 后端转为 day）
 const since = ref('')
 const until = ref('')
-const latencyPoints = ref([])
-const loadingLatency = ref(false)
+const autoRefresh = ref(true)
 
+const targetId = ref('')
 const interfaceName = ref('')
+
+const latencyPoints = ref([])
 const trafficPoints = ref([])
+const latencySource = ref('')
+const trafficSource = ref('')
+const loadingLatency = ref(false)
 const loadingTraffic = ref(false)
+
+let refreshTimer = null
 
 async function loadDictionaries() {
   try {
@@ -28,11 +35,23 @@ async function loadDictionaries() {
     targets.value = []
   }
   try {
-    const { data } = await interfaceApi.liveInventory()
-    ifaces.value = data.interfaces || []
+    monitorIfaces.value = await operationApi.listMonitorInterfaces()
   } catch {
-    ifaces.value = []
+    monitorIfaces.value = []
   }
+  try {
+    const { data } = await interfaceApi.liveInventory()
+    allIfaces.value = data.interfaces || []
+  } catch {
+    allIfaces.value = []
+  }
+}
+
+function bucketParams() {
+  const params = { bucket: bucket.value }
+  if (since.value) params.since = since.value
+  if (until.value) params.until = until.value
+  return params
 }
 
 async function loadLatency() {
@@ -42,11 +61,9 @@ async function loadLatency() {
   }
   loadingLatency.value = true
   try {
-    const params = { bucket: bucket.value }
-    if (since.value) params.since = since.value
-    if (until.value) params.until = until.value
-    const data = await operationApi.latencySeries(targetId.value, params)
+    const data = await operationApi.latencySeries(targetId.value, bucketParams())
     latencyPoints.value = data.points || []
+    latencySource.value = data.source || ''
   } catch (e) {
     ElMessage.error('加载延迟系列失败')
   } finally {
@@ -61,11 +78,10 @@ async function loadTraffic() {
   }
   loadingTraffic.value = true
   try {
-    const params = { interface: interfaceName.value, bucket: bucket.value }
-    if (since.value) params.since = since.value
-    if (until.value) params.until = until.value
+    const params = { interface: interfaceName.value, ...bucketParams() }
     const data = await operationApi.trafficSeries(params)
     trafficPoints.value = data.points || []
+    trafficSource.value = data.source || ''
   } catch (e) {
     ElMessage.error('加载流量系列失败')
   } finally {
@@ -73,101 +89,186 @@ async function loadTraffic() {
   }
 }
 
+function refreshAll() {
+  if (targetId.value) loadLatency()
+  if (interfaceName.value) loadTraffic()
+}
+
+watch([bucket, since, until], refreshAll)
+watch(targetId, loadLatency)
+watch(interfaceName, loadTraffic)
+watch(autoRefresh, (v) => {
+  if (refreshTimer) clearInterval(refreshTimer)
+  if (v) refreshTimer = setInterval(refreshAll, 30000)
+})
+
+function _fmt2(v) { return (v === null || v === undefined || Number.isNaN(Number(v))) ? '—' : Number(v).toFixed(2) }
+
 const latencyOption = computed(() => {
-  const x = latencyPoints.value.map((p) => p.bucket)
+  const isTime = bucket.value === 'minute' || bucket.value === 'hour'
   return {
-    grid: { left: 50, right: 16, top: 30, bottom: 30 },
-    legend: { data: ['avg ms', 'max ms', 'loss %'] },
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: x },
+    grid: { left: 56, right: 24, top: 32, bottom: 36, containLabel: true },
+    legend: { data: ['avg ms', 'max ms', 'loss %'], top: 0 },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      valueFormatter: (v) => _fmt2(v),
+    },
+    xAxis: isTime
+      ? { type: 'time' }
+      : { type: 'category', data: latencyPoints.value.map((p) => p.bucket) },
     yAxis: [
-      { type: 'value', name: 'ms' },
-      { type: 'value', name: '%', position: 'right', min: 0, max: 100 },
+      { type: 'value', name: 'ms', axisLabel: { formatter: (v) => _fmt2(v) } },
+      { type: 'value', name: '%', position: 'right', min: 0, max: 100, axisLabel: { formatter: (v) => _fmt2(v) } },
     ],
     series: [
-      { name: 'avg ms', type: 'line', smooth: true, data: latencyPoints.value.map((p) => p.rtt_avg_ms) },
-      { name: 'max ms', type: 'line', smooth: true, data: latencyPoints.value.map((p) => p.rtt_max_ms) },
+      {
+        name: 'avg ms',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        areaStyle: { opacity: 0.1 },
+        data: latencyPoints.value.map((p) => (isTime ? [p.bucket, p.rtt_avg_ms] : p.rtt_avg_ms)),
+      },
+      {
+        name: 'max ms',
+        type: 'line',
+        smooth: true,
+        showSymbol: false,
+        lineStyle: { type: 'dashed' },
+        data: latencyPoints.value.map((p) => (isTime ? [p.bucket, p.rtt_max_ms] : p.rtt_max_ms)),
+      },
       {
         name: 'loss %',
         type: 'bar',
         yAxisIndex: 1,
-        data: latencyPoints.value.map((p) => p.loss_pct),
         itemStyle: { color: '#f56c6c' },
+        data: latencyPoints.value.map((p) => (isTime ? [p.bucket, p.loss_pct] : p.loss_pct)),
       },
     ],
   }
 })
 
 const trafficOption = computed(() => {
-  const x = trafficPoints.value.map((p) => p.bucket)
+  const isTime = bucket.value === 'minute' || bucket.value === 'hour'
   return {
-    grid: { left: 50, right: 16, top: 30, bottom: 30 },
-    legend: { data: ['RX 平均 Mbps', 'TX 平均 Mbps', 'RX 峰值 Mbps', 'TX 峰值 Mbps'] },
-    tooltip: { trigger: 'axis' },
-    xAxis: { type: 'category', data: x },
-    yAxis: { type: 'value', name: 'Mbps' },
+    grid: { left: 56, right: 24, top: 32, bottom: 36, containLabel: true },
+    legend: { data: ['RX 平均 Mbps', 'TX 平均 Mbps', 'RX 峰值 Mbps', 'TX 峰值 Mbps'], top: 0 },
+    tooltip: {
+      trigger: 'axis',
+      axisPointer: { type: 'cross' },
+      valueFormatter: (v) => _fmt2(v),
+    },
+    xAxis: isTime
+      ? { type: 'time' }
+      : { type: 'category', data: trafficPoints.value.map((p) => p.bucket) },
+    yAxis: { type: 'value', name: 'Mbps', min: 0, axisLabel: { formatter: (v) => _fmt2(v) } },
     series: [
       {
         name: 'RX 平均 Mbps',
         type: 'line',
         smooth: true,
+        showSymbol: false,
         areaStyle: { opacity: 0.1 },
-        data: trafficPoints.value.map((p) => ((p.rx_bps_avg || 0) / 1e6).toFixed(3)),
+        data: trafficPoints.value.map((p) =>
+          isTime ? [p.bucket, (p.rx_bps_avg || 0) / 1e6] : (p.rx_bps_avg || 0) / 1e6,
+        ),
       },
       {
         name: 'TX 平均 Mbps',
         type: 'line',
         smooth: true,
+        showSymbol: false,
         areaStyle: { opacity: 0.1 },
-        data: trafficPoints.value.map((p) => ((p.tx_bps_avg || 0) / 1e6).toFixed(3)),
+        data: trafficPoints.value.map((p) =>
+          isTime ? [p.bucket, (p.tx_bps_avg || 0) / 1e6] : (p.tx_bps_avg || 0) / 1e6,
+        ),
       },
       {
         name: 'RX 峰值 Mbps',
         type: 'line',
         smooth: true,
+        showSymbol: false,
         lineStyle: { type: 'dashed' },
-        data: trafficPoints.value.map((p) => ((p.rx_bps_max || 0) / 1e6).toFixed(3)),
+        data: trafficPoints.value.map((p) =>
+          isTime ? [p.bucket, (p.rx_bps_max || 0) / 1e6] : (p.rx_bps_max || 0) / 1e6,
+        ),
       },
       {
         name: 'TX 峰值 Mbps',
         type: 'line',
         smooth: true,
+        showSymbol: false,
         lineStyle: { type: 'dashed' },
-        data: trafficPoints.value.map((p) => ((p.tx_bps_max || 0) / 1e6).toFixed(3)),
+        data: trafficPoints.value.map((p) =>
+          isTime ? [p.bucket, (p.tx_bps_max || 0) / 1e6] : (p.tx_bps_max || 0) / 1e6,
+        ),
       },
     ],
   }
 })
 
-function refreshAll() {
-  if (targetId.value) loadLatency()
-  if (interfaceName.value) loadTraffic()
-}
-watch([bucket, since, until], refreshAll)
-watch(targetId, loadLatency)
-watch(interfaceName, loadTraffic)
+// 合并的接口下拉：优先来自 MonitorInterface（已被调度器纳入采样），其次系统接口
+const trafficIfaceOptions = computed(() => {
+  const seen = new Set()
+  const opts = []
+  for (const m of monitorIfaces.value || []) {
+    seen.add(m.interface_name)
+    opts.push({
+      value: m.interface_name,
+      label: `${m.interface_name}（已纳入监控${m.enabled ? '' : '·停用'}）`,
+      monitored: true,
+    })
+  }
+  for (const i of allIfaces.value || []) {
+    if (seen.has(i.ifname)) continue
+    opts.push({ value: i.ifname, label: `${i.ifname} (${i.kind})`, monitored: false })
+  }
+  return opts
+})
 
-onMounted(loadDictionaries)
+onMounted(() => {
+  loadDictionaries()
+  refreshTimer = setInterval(refreshAll, 30000)
+})
+onUnmounted(() => {
+  if (refreshTimer) clearInterval(refreshTimer)
+})
 </script>
 
 <template>
   <div class="page">
     <PageHeader
       title="监控图表"
-      description="按小时 / 天 / 月 聚合：延迟 (rtt avg/max) + 丢包率；接口流量平均与峰值 (Mbps)"
+      description="基于调度器持续采样得到的汇总：按 分钟 / 小时 / 天 查看延迟、丢包、接口流量；超过 30 天的明细会被滚动覆盖"
       :icon="TrendCharts"
     />
     <el-card shadow="never">
       <template #header>查询条件</template>
       <div class="row">
-        <el-select v-model="bucket" style="width: 140px">
-          <el-option label="按小时" value="hour" />
-          <el-option label="按天" value="day" />
-          <el-option label="按月" value="month" />
-        </el-select>
-        <el-date-picker v-model="since" type="datetime" placeholder="since" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 220px" />
-        <el-date-picker v-model="until" type="datetime" placeholder="until" value-format="YYYY-MM-DDTHH:mm:ss" style="width: 220px" />
-        <el-button @click="refreshAll">刷新</el-button>
+        <el-radio-group v-model="bucket">
+          <el-radio-button label="minute">按分钟</el-radio-button>
+          <el-radio-button label="hour">按小时</el-radio-button>
+          <el-radio-button label="day">按天</el-radio-button>
+          <el-radio-button label="month">按月</el-radio-button>
+        </el-radio-group>
+        <el-date-picker
+          v-model="since"
+          type="datetime"
+          placeholder="开始时间"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 220px"
+        />
+        <el-date-picker
+          v-model="until"
+          type="datetime"
+          placeholder="结束时间"
+          value-format="YYYY-MM-DDTHH:mm:ss"
+          style="width: 220px"
+        />
+        <el-button :icon="RefreshRight" @click="refreshAll">刷新</el-button>
+        <el-switch v-model="autoRefresh" active-text="自动刷新 (30s)" />
+        <el-tag size="small" type="info">保留策略：raw &amp; 分钟 = 30 天，小时 / 天 = 长期</el-tag>
       </div>
     </el-card>
 
@@ -175,26 +276,43 @@ onMounted(loadDictionaries)
       <template #header>
         <div class="row">
           <span>延迟 / 丢包</span>
+          <el-tag v-if="latencySource" size="small" :type="latencySource === 'rollup' ? 'success' : 'warning'">
+            source: {{ latencySource }}
+          </el-tag>
           <div class="spacer" />
-          <el-select v-model="targetId" placeholder="选择监控目标" filterable clearable style="width: 280px">
+          <el-select v-model="targetId" placeholder="选择监控目标" filterable clearable style="width: 320px">
             <el-option v-for="t in targets" :key="t.id" :label="`${t.name} (${t.address})`" :value="t.id" />
           </el-select>
         </div>
       </template>
-      <EChart :option="latencyOption" :loading="loadingLatency" :height="340" />
+      <EChart :option="latencyOption" :loading="loadingLatency" :height="360" />
     </el-card>
 
     <el-card shadow="never">
       <template #header>
         <div class="row">
           <span>接口流量</span>
+          <el-tag v-if="trafficSource" size="small" :type="trafficSource === 'rollup' ? 'success' : 'warning'">
+            source: {{ trafficSource }}
+          </el-tag>
           <div class="spacer" />
-          <el-select v-model="interfaceName" placeholder="选择接口" filterable clearable style="width: 280px">
-            <el-option v-for="i in ifaces" :key="i.ifname" :label="`${i.ifname} (${i.kind})`" :value="i.ifname" />
+          <el-select
+            v-model="interfaceName"
+            placeholder="选择接口（建议先在「品质监控」纳入采样）"
+            filterable
+            clearable
+            style="width: 360px"
+          >
+            <el-option
+              v-for="o in trafficIfaceOptions"
+              :key="o.value"
+              :label="o.label"
+              :value="o.value"
+            />
           </el-select>
         </div>
       </template>
-      <EChart :option="trafficOption" :loading="loadingTraffic" :height="340" />
+      <EChart :option="trafficOption" :loading="loadingTraffic" :height="360" />
     </el-card>
   </div>
 </template>

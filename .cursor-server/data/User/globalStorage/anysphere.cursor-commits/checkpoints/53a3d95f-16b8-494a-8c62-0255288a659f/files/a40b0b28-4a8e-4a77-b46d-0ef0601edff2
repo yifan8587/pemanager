@@ -1,0 +1,309 @@
+"""
+WireGuard 接口路由的「单独下发」。
+
+实现策略：
+- 直接维护 /etc/wireguard/<ifname>.conf 的 [Interface] 段：将本模块管理的路由以
+  `PostUp = ip route replace ...` / `PostDown = ip route del ...` 注入到一对标记行之间；
+- 调用 `wg-quick down <if>` + `wg-quick up <if>` 让 wg-quick 完整重建接口并执行 PostUp/PostDown，
+  路由生效与回收均走同一流程，删除路由意图后再下发即可自动从内核移除；
+- `wg-quick down` 失败（接口此前不是由 wg-quick 创建，例如 python-wireguard 直接拉起）
+  会回退到 `ip link delete dev <if>` 后再 `wg-quick up`。
+
+设计原则：
+- 不再向 routemanage 的路由片段写入 WG 私钥；WG 的 [Interface] / [Peer] 仍由 interfacemanage 维护，
+  本模块只负责更新（带标记的）路由块。
+- onlink 仅在显式 via <网关> 时下发；裸 `dev <if> onlink` 会被内核拒绝
+  （PERVASIVE 与 ONLINK 不能并存）。
+"""
+from __future__ import annotations
+
+import os
+import re
+from typing import Any, Iterable
+
+from django.conf import settings
+
+from interfacemanage.models import DesiredTunnelConfig
+from interfacemanage.services.netplan_writing import _run as _elevated_run
+from interfacemanage.services.wireguard_apply import (
+    WG_CONF_MANAGED_MARKER,
+    wireguard_conf_path,
+)
+
+from routemanage.models import DesiredRouteConfig
+
+MANAGED_ROUTES_BEGIN = '# PE Manager managed routes BEGIN (routemanage)'
+MANAGED_ROUTES_END = '# PE Manager managed routes END (routemanage)'
+
+_BLOCK_RE = re.compile(
+    re.escape(MANAGED_ROUTES_BEGIN) + r'.*?' + re.escape(MANAGED_ROUTES_END) + r'\s*\n?',
+    re.DOTALL,
+)
+
+
+def _wg_ifnames() -> set[str]:
+    return set(
+        DesiredTunnelConfig.objects.filter(
+            kind=DesiredTunnelConfig.Kind.WIREGUARD
+        ).values_list('ifname', flat=True)
+    )
+
+
+def wireguard_route_intents() -> list[DesiredRouteConfig]:
+    """筛选出与 WG 接口绑定的路由意图。"""
+    wgs = _wg_ifnames()
+    if not wgs:
+        return []
+    return list(
+        DesiredRouteConfig.objects.filter(interface_name__in=wgs).order_by(
+            'interface_name', 'dest_cidr', 'id'
+        )
+    )
+
+
+def non_wireguard_route_intents() -> list[DesiredRouteConfig]:
+    """所有非 WG 接口的路由意图（走 netplan 持久化）。"""
+    wgs = _wg_ifnames()
+    qs = DesiredRouteConfig.objects.all().order_by('interface_name', 'dest_cidr', 'id')
+    if not wgs:
+        return list(qs)
+    return [r for r in qs if (r.interface_name or '').strip() not in wgs]
+
+
+def _route_arg_tail(rec: DesiredRouteConfig, *, for_del: bool = False) -> list[str]:
+    """生成 `ip route <action> ...` 的尾部参数（不含 ip 二进制 / 家族 / action）。"""
+    parts: list[str] = [(rec.dest_cidr or '').strip()]
+    if rec.gateway:
+        parts += ['via', str(rec.gateway)]
+    parts += ['dev', (rec.interface_name or '').strip()]
+    # onlink 仅在显式 via <网关> 时合法；否则会触发
+    # "Invalid flags for nexthop - PERVASIVE and ONLINK can not be set"。
+    if rec.on_link and rec.gateway and not for_del:
+        parts += ['onlink']
+    if rec.metric is not None:
+        parts += ['metric', str(int(rec.metric))]
+    if rec.route_table is not None:
+        parts += ['table', str(int(rec.route_table))]
+    return parts
+
+
+def _family_flag_for_route(rec: DesiredRouteConfig) -> str:
+    dst = (rec.dest_cidr or '').strip()
+    return '-6' if ':' in dst else '-4'
+
+
+def _route_to_postup(rec: DesiredRouteConfig) -> tuple[str, str]:
+    fam = _family_flag_for_route(rec)
+    up_args = _route_arg_tail(rec, for_del=False)
+    down_args = _route_arg_tail(rec, for_del=True)
+    up = f"PostUp = ip {fam} route replace {' '.join(up_args)}"
+    down = f"PostDown = ip {fam} route del {' '.join(down_args)} || true"
+    return up, down
+
+
+def render_managed_routes_block(ifname: str) -> str:
+    rules = wireguard_route_intents()
+    rules_for = [r for r in rules if (r.interface_name or '').strip() == ifname]
+    lines: list[str] = [MANAGED_ROUTES_BEGIN]
+    if not rules_for:
+        lines.append('# (无路由意图)')
+    else:
+        ups: list[str] = []
+        downs: list[str] = []
+        for r in rules_for:
+            u, d = _route_to_postup(r)
+            ups.append(u)
+            downs.append(d)
+        lines.extend(ups)
+        lines.extend(downs)
+    lines.append(MANAGED_ROUTES_END)
+    return '\n'.join(lines) + '\n'
+
+
+def _strip_managed_block(body: str) -> str:
+    return _BLOCK_RE.sub('', body)
+
+
+_PEER_START_RE = re.compile(r'^\s*\[Peer\]', re.MULTILINE)
+
+
+def _insert_block_into_interface_section(body: str, block: str) -> str:
+    """先剥离旧块，再把 block 插到第一个 [Peer] 之前；若无 [Peer] 则追加到结尾。"""
+    body = _strip_managed_block(body)
+    m = _PEER_START_RE.search(body)
+    if m:
+        idx = m.start()
+        prefix = body[:idx].rstrip() + '\n\n'
+        suffix = body[idx:]
+        return prefix + block + '\n' + suffix
+    sep = '' if body.endswith('\n') else '\n'
+    return body + sep + '\n' + block
+
+
+def reconcile_wg_conf_routes(ifname: str) -> dict[str, Any]:
+    """
+    把 ifname 对应的路由意图注入 /etc/wireguard/<ifname>.conf 的托管块；不存在则报错。
+    返回 {path, body, count, exists, ok, error?}
+    """
+    path = wireguard_conf_path(ifname)
+    if not os.path.exists(path):
+        return {
+            'ifname': ifname,
+            'path': path,
+            'exists': False,
+            'ok': False,
+            'error': (
+                f'{path} 不存在；请先在「隧道接口配置」中下发该 WG 接口，再下发路由'
+            ),
+        }
+    try:
+        with open(path, encoding='utf-8') as f:
+            body = f.read()
+    except OSError as exc:
+        return {'ifname': ifname, 'path': path, 'exists': True, 'ok': False, 'error': str(exc)}
+
+    block = render_managed_routes_block(ifname)
+    new_body = _insert_block_into_interface_section(body, block)
+
+    # 标记本文件由 PE Manager 管理（与 interfacemanage 一致），便于 stale 清理
+    if not new_body.lstrip().startswith(WG_CONF_MANAGED_MARKER):
+        new_body = WG_CONF_MANAGED_MARKER + '\n' + new_body
+
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as fh:
+            fh.write(new_body)
+            if not new_body.endswith('\n'):
+                fh.write('\n')
+    except OSError as exc:
+        return {'ifname': ifname, 'path': path, 'exists': True, 'ok': False, 'error': str(exc)}
+
+    rules = wireguard_route_intents()
+    count_for = sum(1 for r in rules if (r.interface_name or '').strip() == ifname)
+    return {
+        'ifname': ifname,
+        'path': path,
+        'exists': True,
+        'ok': True,
+        'body': new_body,
+        'block': block,
+        'count': count_for,
+    }
+
+
+def preview_wg_routes() -> dict[str, Any]:
+    wgs = _wg_ifnames()
+    rules = wireguard_route_intents()
+    interfaces: list[dict[str, Any]] = []
+    for ifn in sorted(wgs):
+        path = wireguard_conf_path(ifn)
+        rules_for = [r for r in rules if (r.interface_name or '').strip() == ifn]
+        block = render_managed_routes_block(ifn)
+        exists = os.path.exists(path)
+        item = {
+            'ifname': ifn,
+            'conf_path': path,
+            'conf_exists': exists,
+            'count': len(rules_for),
+            'block': block,
+            'apply_cmds': [f'wg-quick down {ifn} || ip link delete dev {ifn}', f'wg-quick up {ifn}'],
+        }
+        interfaces.append(item)
+    return {
+        'ok': True,
+        'interfaces': interfaces,
+        'total_count': len(rules),
+        'managed_interfaces': len(wgs),
+    }
+
+
+def _wg_quick_cycle(ifname: str, steps: list[dict[str, Any]]) -> bool:
+    """wg-quick down → 失败回退 ip link delete → wg-quick up；返回 up 是否成功。"""
+    down = _elevated_run(['wg-quick', 'down', ifname], timeout_kind='apply')
+    steps.append(
+        {
+            'step': 'wg-quick down',
+            'ifname': ifname,
+            'returncode': down.returncode,
+            'ok': down.ok,
+            'stderr': down.stderr,
+            'stdout': down.stdout,
+            'fatal': False,
+        }
+    )
+    if not down.ok:
+        # 容错：可能此前接口由 python-wireguard 直接 setlink up，wg-quick 找不到 .name 文件。
+        link = _elevated_run(['ip', 'link', 'delete', 'dev', ifname], timeout_kind='apply')
+        steps.append(
+            {
+                'step': 'ip link delete (fallback)',
+                'ifname': ifname,
+                'returncode': link.returncode,
+                'ok': link.ok or 'Cannot find device' in (link.stderr or ''),
+                'stderr': link.stderr,
+                'stdout': link.stdout,
+                'fatal': False,
+            }
+        )
+
+    up = _elevated_run(['wg-quick', 'up', ifname], timeout_kind='apply')
+    steps.append(
+        {
+            'step': 'wg-quick up',
+            'ifname': ifname,
+            'returncode': up.returncode,
+            'ok': up.ok,
+            'stderr': up.stderr,
+            'stdout': up.stdout,
+        }
+    )
+    return up.ok
+
+
+def apply_wg_routes() -> dict[str, Any]:
+    """对每个 WG 接口：写入托管路由块 → wg-quick down/up 重建接口。"""
+    if not getattr(settings, 'ROUTEMANAGE_IPROUTE_WRITE_ENABLED', False):
+        return {'ok': False, 'error': 'WG 路由下发已关闭（settings.ROUTEMANAGE_IPROUTE_WRITE_ENABLED）'}
+
+    wgs = _wg_ifnames()
+    if not wgs:
+        return {
+            'ok': True,
+            'message': '无 WireGuard 接口意图，跳过',
+            'steps': [],
+            'applied_interfaces': [],
+            'failed': [],
+        }
+
+    steps: list[dict[str, Any]] = []
+    applied: list[str] = []
+    failed: list[dict[str, Any]] = []
+
+    for ifn in sorted(wgs):
+        recon = reconcile_wg_conf_routes(ifn)
+        steps.append(
+            {
+                'step': 'write conf (managed routes block)',
+                'ifname': ifn,
+                'path': recon.get('path'),
+                'route_count': recon.get('count', 0),
+                'ok': recon['ok'],
+                'stderr': recon.get('error') or '',
+            }
+        )
+        if not recon['ok']:
+            failed.append({'ifname': ifn, 'stderr': recon.get('error') or ''})
+            continue
+
+        ok = _wg_quick_cycle(ifn, steps)
+        if ok:
+            applied.append(ifn)
+        else:
+            failed.append({'ifname': ifn, 'stderr': '\n'.join(s.get('stderr') or '' for s in steps[-2:])})
+
+    return {
+        'ok': not failed,
+        'applied_interfaces': applied,
+        'failed': failed,
+        'steps': steps,
+    }

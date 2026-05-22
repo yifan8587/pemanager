@@ -1,0 +1,45 @@
+import { http } from './client'
+
+function unwrapList(data) {
+  if (Array.isArray(data)) return data
+  if (data && Array.isArray(data.results)) return data.results
+  return []
+}
+
+export const operationApi = {
+  health: () => http.get('/api/operationmanage/health/'),
+
+  ping: (payload) => http.post('/api/operationmanage/tools/ping/', payload).then((r) => r.data),
+  mtr: (payload) => http.post('/api/operationmanage/tools/mtr/', payload).then((r) => r.data),
+  trafficLive: (payload) =>
+    http.post('/api/operationmanage/tools/traffic/live/', payload).then((r) => r.data),
+  trafficBatch: (interfaces) =>
+    http.post('/api/operationmanage/tools/traffic/batch/', { interfaces }).then((r) => r.data),
+  trafficSnapshot: () =>
+    http.get('/api/operationmanage/tools/traffic/snapshot/').then((r) => r.data),
+
+  listTargets: () =>
+    http.get('/api/operationmanage/monitor-targets/').then((r) => unwrapList(r.data)),
+  createTarget: (payload) => http.post('/api/operationmanage/monitor-targets/', payload),
+  patchTarget: (id, payload) =>
+    http.patch(`/api/operationmanage/monitor-targets/${id}/`, payload),
+  deleteTarget: (id) => http.delete(`/api/operationmanage/monitor-targets/${id}/`),
+  sampleNow: (id) =>
+    http.post(`/api/operationmanage/monitor-targets/${id}/sample-now/`).then((r) => r.data),
+  latencySeries: (id, params) =>
+    http
+      .get(`/api/operationmanage/monitor-targets/${id}/series/`, { params })
+      .then((r) => r.data),
+
+  listLatencySamples: (params) =>
+    http.get('/api/operationmanage/latency-samples/', { params }).then((r) => unwrapList(r.data)),
+  trafficSeries: (params) =>
+    http.get('/api/operationmanage/traffic-series/', { params }).then((r) => r.data),
+  listTrafficSamples: (params) =>
+    http.get('/api/operationmanage/traffic-samples/', { params }).then((r) => unwrapList(r.data)),
+
+  sampleAllNow: (interfaces = []) =>
+    http
+      .post('/api/operationmanage/sample-now/', { interfaces })
+      .then((r) => r.data),
+}

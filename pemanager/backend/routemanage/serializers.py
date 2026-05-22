@@ -1,9 +1,9 @@
 from django.core.exceptions import ValidationError as DjangoValidationError
 from rest_framework import serializers
 
-from interfacemanage.models import NetworkInterfaceRecord
-from resourcemanage.models import IPAddressEntry
-from routemanage.models import DesiredRouteConfig
+from interfacemanage.models import DesiredTunnelConfig, NetworkInterfaceRecord
+from resourcemanage.models import IPAddressEntry, ResourceCustomer
+from routemanage.models import DesiredRouteConfig, PolicyRouteRule
 from routemanage.services.route_kind_map import infer_netplan_device_class_for_interface
 
 
@@ -15,6 +15,17 @@ class DesiredRouteConfigSerializer(serializers.ModelSerializer):
         allow_null=True,
         required=False,
     )
+    is_wireguard = serializers.SerializerMethodField()
+    # 显式关联的客户（FK）
+    customer = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=ResourceCustomer.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    # 优先取显式 FK，没填时回退到 ip_allocation.customer
+    customer_code = serializers.SerializerMethodField()
+    customer_name = serializers.SerializerMethodField()
 
     class Meta:
         model = DesiredRouteConfig
@@ -23,6 +34,7 @@ class DesiredRouteConfigSerializer(serializers.ModelSerializer):
             'interface_name',
             'netplan_device_class',
             'linked_interface',
+            'is_wireguard',
             'dest_cidr',
             'gateway',
             'on_link',
@@ -30,11 +42,41 @@ class DesiredRouteConfigSerializer(serializers.ModelSerializer):
             'route_table',
             'ip_allocation',
             'ip_address',
+            'customer',
+            'customer_code',
+            'customer_name',
             'remark',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id',
+            'is_wireguard',
+            'customer_code',
+            'customer_name',
+            'created_at',
+            'updated_at',
+        ]
+
+    def get_customer_code(self, obj: DesiredRouteConfig) -> str | None:
+        if obj.customer_id:
+            return obj.customer.code
+        alloc = obj.ip_allocation
+        return alloc.customer.code if (alloc and alloc.customer_id) else None
+
+    def get_customer_name(self, obj: DesiredRouteConfig) -> str | None:
+        if obj.customer_id:
+            return obj.customer.name
+        alloc = obj.ip_allocation
+        return alloc.customer.name if (alloc and alloc.customer_id) else None
+
+    def get_is_wireguard(self, obj: DesiredRouteConfig) -> bool:
+        ifn = (obj.interface_name or '').strip()
+        if not ifn:
+            return False
+        return DesiredTunnelConfig.objects.filter(
+            ifname=ifn, kind=DesiredTunnelConfig.Kind.WIREGUARD
+        ).exists()
 
     def validate(self, attrs):
         instance: DesiredRouteConfig | None = getattr(self, 'instance', None)
@@ -102,6 +144,71 @@ class ImportSystemRouteItemSerializer(serializers.Serializer):
     metric = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     table = serializers.IntegerField(required=False, allow_null=True, min_value=0)
     on_link = serializers.BooleanField(required=False, default=False)
+
+
+class PolicyRouteRuleSerializer(serializers.ModelSerializer):
+    action_label = serializers.SerializerMethodField()
+    summary = serializers.SerializerMethodField()
+    customer = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=ResourceCustomer.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
+    customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
+
+    class Meta:
+        model = PolicyRouteRule
+        fields = [
+            'id',
+            'name',
+            'priority',
+            'family',
+            'invert',
+            'from_cidr',
+            'to_cidr',
+            'iif',
+            'oif',
+            'fwmark',
+            'tos',
+            'suppress_prefixlength',
+            'action',
+            'action_label',
+            'table_id',
+            'nat_target',
+            'enabled',
+            'customer',
+            'customer_code',
+            'customer_name',
+            'remark',
+            'summary',
+            'created_at',
+            'updated_at',
+        ]
+        read_only_fields = [
+            'id', 'action_label', 'summary', 'customer_code', 'customer_name',
+            'created_at', 'updated_at',
+        ]
+
+    def get_action_label(self, obj: PolicyRouteRule) -> str:
+        return obj.summarize_action()
+
+    def get_summary(self, obj: PolicyRouteRule) -> str:
+        return str(obj)
+
+    def create(self, validated_data):
+        obj = PolicyRouteRule(**validated_data)
+        obj.full_clean()
+        obj.save()
+        return obj
+
+    def update(self, instance, validated_data):
+        for k, v in validated_data.items():
+            setattr(instance, k, v)
+        instance.full_clean()
+        instance.save()
+        return instance
 
 
 def import_routes_from_live_rows(routes: list[dict]) -> dict:

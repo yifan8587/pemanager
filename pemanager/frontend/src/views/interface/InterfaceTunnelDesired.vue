@@ -1,16 +1,26 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
-import { Share } from '@element-plus/icons-vue'
+import {
+  Share,
+  Key,
+  CopyDocument,
+  Refresh,
+  Upload,
+  Plus,
+} from '@element-plus/icons-vue'
 import { interfaceApi } from '../../api/interfaceApi'
-import JsonBlock from '../../components/JsonBlock.vue'
+import { resourceApi } from '../../api/resourceApi'
 import PageHeader from '../../components/PageHeader.vue'
 
 const loading = ref(false)
 const rows = ref([])
+const customers = ref([])
+const allocByIf = ref({})
 const dlg = ref(false)
 const saving = ref(false)
 const editingId = ref(null)
+const keyGenLoading = ref(false)
 
 const kind = ref('gre')
 
@@ -19,6 +29,7 @@ const gre = reactive({
   local: '',
   remote: '',
   address_cidr: '',
+  remote_cidr: '',
   ttl: 64,
   key: '',
 })
@@ -29,6 +40,7 @@ const vxlan = reactive({
   local: '',
   remote: '',
   address_cidr: '',
+  remote_cidr: '',
   port: 8472,
   ttl: 255,
 })
@@ -38,15 +50,18 @@ const wg = reactive({
   addresses: '',
   listen_port: 51820,
   private_key: '',
+  public_key: '',
   peer_public_key: '',
   peer_endpoint: '',
   peer_allowed_ips: '0.0.0.0/0',
+  peer_addresses: '',
   persistent_keepalive: 25,
 })
 
 const remark = ref('')
+const customerCode = ref('')
 
-const title = computed(() => (editingId.value ? '编辑意图配置' : '新增隧道接口（同步到后端）'))
+const title = computed(() => (editingId.value ? '编辑隧道接口配置' : '新增隧道接口配置'))
 
 function isCidr(s) {
   const t = String(s || '').trim()
@@ -95,7 +110,7 @@ function buildSpec() {
         .split(/[,\s]+/)
         .map((s) => s.trim())
         .filter(Boolean),
-      keys: { private: wg.private_key },
+      keys: { private: wg.private_key, public: wg.public_key },
       listen_port: Number(wg.listen_port) || 51820,
       peers: [
         {
@@ -118,31 +133,40 @@ function ifnameForKind() {
   return wg.ifname
 }
 
-function openCreate() {
-  editingId.value = null
-  kind.value = 'gre'
+function resetForm() {
   gre.ifname = ''
   gre.local = ''
   gre.remote = ''
   gre.ttl = 64
   gre.key = ''
   gre.address_cidr = ''
+  gre.remote_cidr = ''
   vxlan.ifname = ''
   vxlan.vni = 100
   vxlan.local = ''
   vxlan.remote = ''
   vxlan.address_cidr = ''
+  vxlan.remote_cidr = ''
   vxlan.port = 8472
   vxlan.ttl = 255
   wg.ifname = ''
   wg.addresses = ''
   wg.listen_port = 51820
   wg.private_key = ''
+  wg.public_key = ''
   wg.peer_public_key = ''
   wg.peer_endpoint = ''
   wg.peer_allowed_ips = '0.0.0.0/0'
+  wg.peer_addresses = ''
   wg.persistent_keepalive = 25
   remark.value = ''
+  customerCode.value = ''
+}
+
+function openCreate() {
+  editingId.value = null
+  kind.value = 'gre'
+  resetForm()
   dlg.value = true
 }
 
@@ -150,6 +174,10 @@ function openEdit(row) {
   editingId.value = row.id
   kind.value = row.kind
   remark.value = row.remark || ''
+  customerCode.value = row.customer_code || row.customer || ''
+  resetForm()
+  // resetForm 会清空，编辑场景下需要 customer 重置后再设回来
+  customerCode.value = row.customer_code || row.customer || ''
   const s = row.spec || {}
   if (row.kind === 'gre') {
     const t = s.netplan_tunnel || {}
@@ -176,6 +204,7 @@ function openEdit(row) {
     wg.addresses = (t.addresses || []).join(', ')
     wg.listen_port = t.listen_port ?? 51820
     wg.private_key = t.keys?.private || ''
+    wg.public_key = t.keys?.public || ''
     const p = (t.peers && t.peers[0]) || {}
     wg.peer_public_key = p.public_key || ''
     wg.peer_endpoint = p.endpoint || ''
@@ -184,6 +213,8 @@ function openEdit(row) {
   }
   dlg.value = true
 }
+
+const WG_KEY_RE = /^[A-Za-z0-9+/]{43}=$/
 
 async function save() {
   const name = (ifnameForKind() || '').trim()
@@ -210,6 +241,33 @@ async function save() {
       ElMessage.error('WireGuard 本端地址需为 CIDR，如 10.0.0.1/24')
       return
     }
+    if (!wg.private_key) {
+      ElMessage.error('WireGuard 私钥不能为空，可点「生成密钥对」')
+      return
+    }
+    if (!WG_KEY_RE.test(wg.private_key.trim())) {
+      ElMessage.error('WireGuard 私钥格式无效（应为 43 字符 base64 + "="）')
+      return
+    }
+    if (wg.public_key && !WG_KEY_RE.test(wg.public_key.trim())) {
+      ElMessage.error('本端公钥格式无效；请点「由私钥推导」按钮重新生成')
+      return
+    }
+    const peerPub = (wg.peer_public_key || '').trim()
+    if (!peerPub) {
+      ElMessage.error('请填写「对端公钥」（应来自对端主机，不能与本端公钥相同）')
+      return
+    }
+    if (!WG_KEY_RE.test(peerPub)) {
+      ElMessage.error('对端公钥格式无效（应为 43 字符 base64 + "="）')
+      return
+    }
+    if (wg.public_key && peerPub === wg.public_key.trim()) {
+      ElMessage.error(
+        '对端公钥不能与本端公钥相同；内核会丢弃同公钥 peer，导致 wg show 看不到该 peer',
+      )
+      return
+    }
   }
   saving.value = true
   try {
@@ -217,14 +275,15 @@ async function save() {
       kind: kind.value,
       ifname: name,
       spec: buildSpec(),
+      customer: customerCode.value || null,
       remark: remark.value || '',
     }
     if (editingId.value) {
       await interfaceApi.patchDesiredTunnel(editingId.value, body)
-      ElMessage.success('已更新到后端')
+      ElMessage.success('已更新')
     } else {
       await interfaceApi.createDesiredTunnel(body)
-      ElMessage.success('已同步到后端')
+      ElMessage.success('已保存')
     }
     dlg.value = false
     await load()
@@ -238,7 +297,7 @@ async function save() {
 
 async function remove(row) {
   try {
-    await ElMessageBox.confirm(`删除意图配置 ${row.ifname}？`, '确认', { type: 'warning' })
+    await ElMessageBox.confirm(`删除隧道接口配置 ${row.ifname}？`, '确认', { type: 'warning' })
   } catch {
     return
   }
@@ -251,9 +310,6 @@ async function remove(row) {
   }
 }
 
-const drawerRow = ref(null)
-const drawerOpen = ref(false)
-
 function tunnelCidrs(row) {
   const t = (row.spec || {}).netplan_tunnel || {}
   const a = t.addresses
@@ -262,15 +318,39 @@ function tunnelCidrs(row) {
   return '—'
 }
 
-function showJson(row) {
-  drawerRow.value = row
-  drawerOpen.value = true
+function tunnelEndpoint(row) {
+  const t = (row.spec || {}).netplan_tunnel || {}
+  if (row.kind === 'wireguard') {
+    const p = (t.peers || [])[0] || {}
+    return p.endpoint || '—'
+  }
+  return [t.local, t.remote].filter(Boolean).join(' → ') || '—'
+}
+
+function customerNameFor(ifname) {
+  const a = allocByIf.value[ifname]
+  if (!a) return ''
+  const c = customers.value.find((x) => x.code === a.customer_code)
+  return c ? c.name || c.code : a.customer_code || ''
 }
 
 async function load() {
   loading.value = true
   try {
-    rows.value = await interfaceApi.listDesiredTunnels()
+    const [tunnels, allocs, custs] = await Promise.all([
+      interfaceApi.listDesiredTunnels(),
+      resourceApi.listAllocations().catch(() => []),
+      resourceApi.listCustomers().catch(() => []),
+    ])
+    rows.value = tunnels
+    customers.value = custs || []
+    const ab = {}
+    for (const a of allocs || []) {
+      const key = (a.interface_code || '').trim()
+      if (!key) continue
+      ab[key] = a
+    }
+    allocByIf.value = ab
   } catch (e) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
   } finally {
@@ -279,85 +359,323 @@ async function load() {
 }
 
 const applying = ref(false)
+const selectedRows = ref([])
+function onSelectionChange(rs) { selectedRows.value = rs || [] }
+const selectedIds = computed(() => selectedRows.value.map((r) => r.id))
+const selWgOnly = computed(() => selectedRows.value.length > 0
+  && selectedRows.value.every((r) => r.kind === 'wireguard'))
 
-async function applyToSystem() {
-  if (!rows.value.length) {
+async function applyToSystem(scope = 'all') {
+  // scope: 'all' | 'selected'
+  const ids = scope === 'selected' ? selectedIds.value : null
+  if (scope === 'selected' && !ids.length) {
+    ElMessage.warning('请先在表格中勾选要下发的接口')
+    return
+  }
+  if (scope === 'all' && !rows.value.length) {
     ElMessage.warning('没有可下发的隧道配置')
     return
   }
+  const msg = scope === 'selected'
+    ? (selWgOnly.value
+        ? `仅对选中的 ${ids.length} 个 WireGuard 接口执行 wg-quick down → up（不触发 netplan，不影响其他接口）。继续？`
+        : `将对选中的 ${ids.length} 个接口下发；GRE/VXLAN 仍会走 netplan generate → netplan try（netplan try 只 reload 差异接口，不会重启其他正常接口），WG 仅对选中接口 wg-quick down → up。继续？`)
+    : '将依据当前数据库下发到系统：GRE/VXLAN 走 netplan generate → netplan try；WireGuard 写入 /etc/wireguard/<if>.conf 并依次执行 wg-quick down → wg-quick up 重建接口（路由意图会被一同注入 PostUp/PostDown）。继续？'
   try {
-    await ElMessageBox.confirm(
-      '将依据当前数据库生成 netplan 片段：GRE/VXLAN 经 netplan generate → netplan try；WireGuard 使用 python-wireguard 库写入内核并再写入 netplan 持久化片段。需 root/能力（改 /etc/netplan、执行 netplan、加载 py-wireguard.so）。是否继续？',
-      '下发到系统',
-      { type: 'warning', confirmButtonText: '继续' },
-    )
+    await ElMessageBox.confirm(msg, '下发到系统', { type: 'warning', confirmButtonText: '继续' })
   } catch {
     return
   }
   applying.value = true
   try {
-    const { data } = await interfaceApi.applyDesiredTunnelsToSystem()
+    const { data } = await interfaceApi.applyDesiredTunnelsToSystem(ids)
     if (data.ok) {
-      ElMessage.success('netplan 已校验并由 try 确认应用')
+      ElMessage.success(scope === 'selected' ? `已下发选中 ${ids.length} 个接口` : '下发完成')
     } else {
-      await ElMessageBox.alert(
-        `<pre style="white-space:pre-wrap;font-size:12px;max-height:400px;overflow:auto">${JSON.stringify(
-          data,
-          null,
-          2,
-        )}</pre>`,
-        '下发失败',
-        { dangerouslyUseHTMLString: true },
-      )
+      ElMessage.error(data.error || '下发失败')
     }
   } catch (e) {
-    const d = e?.response?.data
-    await ElMessageBox.alert(
-      `<pre style="white-space:pre-wrap;font-size:12px">${JSON.stringify(d || e.message, null, 2)}</pre>`,
-      '请求失败',
-      { dangerouslyUseHTMLString: true },
-    )
+    ElMessage.error(e?.response?.data?.error || e.message || '请求失败')
   } finally {
     applying.value = false
   }
 }
+
+async function genWgKeyPair() {
+  keyGenLoading.value = true
+  try {
+    const { data } = await interfaceApi.wgGenKey()
+    if (data?.ok) {
+      wg.private_key = data.private
+      wg.public_key = data.public
+      ElMessage.success('已生成新密钥对')
+    } else {
+      ElMessage.error(data?.error || '生成失败')
+    }
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.error || e.message || '生成失败')
+  } finally {
+    keyGenLoading.value = false
+  }
+}
+
+async function derivePublicKey() {
+  if (!wg.private_key) {
+    ElMessage.warning('请先输入或生成私钥')
+    return
+  }
+  try {
+    const { data } = await interfaceApi.wgPubKey(wg.private_key)
+    if (data?.ok) {
+      wg.public_key = data.public
+      ElMessage.success('已根据私钥推导出公钥')
+    } else {
+      ElMessage.error(data?.error || '推导失败')
+    }
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.error || e.message || '推导失败')
+  }
+}
+
+watch(
+  () => wg.private_key,
+  (v) => {
+    if (!v) wg.public_key = ''
+  },
+)
+
+function copyText(text) {
+  if (!text) return
+  navigator.clipboard
+    .writeText(text)
+    .then(() => ElMessage.success('已复制'))
+    .catch(() => ElMessage.error('复制失败，请手动选择'))
+}
+
+// 本端配置预览
+const localConfigText = computed(() => {
+  if (kind.value === 'gre') {
+    if (!gre.ifname) return ''
+    return [
+      `# GRE 接口：${gre.ifname}`,
+      `ip tunnel add ${gre.ifname} mode gre local ${gre.local || '<本端IP>'} remote ${gre.remote || '<对端IP>'}${gre.key !== '' ? ` key ${gre.key}` : ''}${gre.ttl ? ` ttl ${gre.ttl}` : ''}`,
+      `ip link set ${gre.ifname} up`,
+      `ip addr add ${gre.address_cidr || '<本端 CIDR>'} dev ${gre.ifname}`,
+      '',
+      '# netplan 等价片段：',
+      'network:',
+      '  version: 2',
+      '  tunnels:',
+      `    ${gre.ifname}:`,
+      `      mode: gre`,
+      `      local: ${gre.local || '<本端IP>'}`,
+      `      remote: ${gre.remote || '<对端IP>'}`,
+      `      addresses: [${gre.address_cidr ? gre.address_cidr : '<本端 CIDR>'}]`,
+      ...(gre.ttl ? [`      ttl: ${gre.ttl}`] : []),
+      ...(gre.key !== '' ? [`      key: ${gre.key}`] : []),
+    ].join('\n')
+  }
+  if (kind.value === 'vxlan') {
+    if (!vxlan.ifname) return ''
+    return [
+      `# VXLAN 接口：${vxlan.ifname}`,
+      `ip link add ${vxlan.ifname} type vxlan id ${vxlan.vni} ${vxlan.remote ? `remote ${vxlan.remote} ` : ''}${vxlan.local ? `local ${vxlan.local} ` : ''}dstport ${vxlan.port}`,
+      `ip link set ${vxlan.ifname} up`,
+      `ip addr add ${vxlan.address_cidr || '<本端 CIDR>'} dev ${vxlan.ifname}`,
+      '',
+      '# netplan 等价片段：',
+      'network:',
+      '  version: 2',
+      '  tunnels:',
+      `    ${vxlan.ifname}:`,
+      `      mode: vxlan`,
+      `      id: ${vxlan.vni}`,
+      ...(vxlan.local ? [`      local: ${vxlan.local}`] : []),
+      ...(vxlan.remote ? [`      remote: ${vxlan.remote}`] : []),
+      `      port: ${vxlan.port}`,
+      `      ttl: ${vxlan.ttl}`,
+      `      addresses: [${vxlan.address_cidr ? vxlan.address_cidr : '<本端 CIDR>'}]`,
+    ].join('\n')
+  }
+  if (!wg.ifname) return ''
+  const peerLines = [
+    '[Peer]',
+    `PublicKey = ${wg.peer_public_key || '<对端公钥>'}`,
+    ...(wg.peer_endpoint ? [`Endpoint = ${wg.peer_endpoint}`] : []),
+    `AllowedIPs = ${wg.peer_allowed_ips || '0.0.0.0/0'}`,
+    ...(wg.persistent_keepalive ? [`PersistentKeepalive = ${wg.persistent_keepalive}`] : []),
+  ]
+  return [
+    `# /etc/wireguard/${wg.ifname}.conf`,
+    '[Interface]',
+    `PrivateKey = ${wg.private_key || '<私钥>'}`,
+    `Address = ${wg.addresses || '<本端 CIDR>'}`,
+    `ListenPort = ${wg.listen_port || 51820}`,
+    '',
+    peerLines.join('\n'),
+  ].join('\n')
+})
+
+const peerConfigText = computed(() => {
+  if (kind.value === 'gre') {
+    if (!gre.local || !gre.remote) return ''
+    const peerLocalCidr = gre.remote_cidr || '<对端 CIDR>'
+    return [
+      `# 对端 GRE 配置（在远端主机执行）`,
+      `ip tunnel add ${gre.ifname || 'gre0'} mode gre local ${gre.remote} remote ${gre.local}${gre.key !== '' ? ` key ${gre.key}` : ''}${gre.ttl ? ` ttl ${gre.ttl}` : ''}`,
+      `ip link set ${gre.ifname || 'gre0'} up`,
+      `ip addr add ${peerLocalCidr} dev ${gre.ifname || 'gre0'}`,
+      '',
+      '# netplan：',
+      'network:',
+      '  version: 2',
+      '  tunnels:',
+      `    ${gre.ifname || 'gre0'}:`,
+      `      mode: gre`,
+      `      local: ${gre.remote}`,
+      `      remote: ${gre.local}`,
+      `      addresses: [${peerLocalCidr}]`,
+      ...(gre.ttl ? [`      ttl: ${gre.ttl}`] : []),
+      ...(gre.key !== '' ? [`      key: ${gre.key}`] : []),
+    ].join('\n')
+  }
+  if (kind.value === 'vxlan') {
+    if (!vxlan.local && !vxlan.remote) return ''
+    const peerLocal = vxlan.remote || '<对端 IP>'
+    const peerRemote = vxlan.local || '<本端 IP>'
+    const peerCidr = vxlan.remote_cidr || '<对端 CIDR>'
+    return [
+      `# 对端 VXLAN 配置（在远端主机执行）`,
+      `ip link add ${vxlan.ifname || 'vxlan100'} type vxlan id ${vxlan.vni} remote ${peerRemote} local ${peerLocal} dstport ${vxlan.port}`,
+      `ip link set ${vxlan.ifname || 'vxlan100'} up`,
+      `ip addr add ${peerCidr} dev ${vxlan.ifname || 'vxlan100'}`,
+      '',
+      '# netplan：',
+      'network:',
+      '  version: 2',
+      '  tunnels:',
+      `    ${vxlan.ifname || 'vxlan100'}:`,
+      `      mode: vxlan`,
+      `      id: ${vxlan.vni}`,
+      `      local: ${peerLocal}`,
+      `      remote: ${peerRemote}`,
+      `      port: ${vxlan.port}`,
+      `      ttl: ${vxlan.ttl}`,
+      `      addresses: [${peerCidr}]`,
+    ].join('\n')
+  }
+  if (!wg.public_key) return ''
+  const peerAddrs = wg.peer_addresses || '<对端本机 CIDR>'
+  const lpHost = wg.peer_endpoint ? '<对端可被访问的 host>' : '<本端可被访问的 host>'
+  return [
+    '# 对端 WireGuard 配置（粘贴到对端 /etc/wireguard/<if>.conf）',
+    '[Interface]',
+    `PrivateKey = <对端私钥（请在对端生成）>`,
+    `Address = ${peerAddrs}`,
+    `ListenPort = 51820`,
+    '',
+    '[Peer]',
+    `# 本端公钥（请将以下值发送给对端）`,
+    `PublicKey = ${wg.public_key}`,
+    `Endpoint = ${lpHost}:${wg.listen_port || 51820}`,
+    `AllowedIPs = ${wg.addresses ? wg.addresses.split(',').map((s) => s.trim()).filter(Boolean).join(', ') : '<本端 CIDR>'}`,
+    `PersistentKeepalive = ${wg.persistent_keepalive || 25}`,
+  ].join('\n')
+})
 
 onMounted(load)
 </script>
 
 <template>
   <div class="page">
-    <PageHeader
-      title="隧道接口配置"
-      description="GRE/VXLAN 走 netplan try；WireGuard 写 /etc/wireguard/<if>.conf 并 netplan 持久化"
-      :icon="Share"
-    >
+    <PageHeader title="隧道接口配置" :icon="Share">
       <template #actions>
-        <el-button type="success" :loading="applying" @click="applyToSystem">下发到系统</el-button>
-        <el-button type="primary" @click="openCreate">新增配置</el-button>
-        <el-button :loading="loading" @click="load">刷新</el-button>
+        <el-button
+          type="success"
+          :loading="applying"
+          :disabled="!selectedRows.length"
+          @click="applyToSystem('selected')"
+        >
+          <el-icon><Upload /></el-icon>
+          <span>下发选中 ({{ selectedRows.length }})</span>
+        </el-button>
+        <el-button type="success" plain :loading="applying" @click="applyToSystem('all')">
+          <el-icon><Upload /></el-icon><span>下发全部</span>
+        </el-button>
+        <el-button type="primary" @click="openCreate">
+          <el-icon><Plus /></el-icon><span>新增配置</span>
+        </el-button>
+        <el-button :loading="loading" @click="load">
+          <el-icon><Refresh /></el-icon><span>刷新</span>
+        </el-button>
       </template>
     </PageHeader>
 
-    <el-table :data="rows" border size="small" v-loading="loading">
+    <el-alert
+      v-if="selectedRows.length"
+      type="info" :closable="false" show-icon
+      :title="`已选 ${selectedRows.length} 项；下发选中仅对所选接口操作${selWgOnly ? '（仅 WireGuard，无需 netplan）' : ''}，不影响其他接口业务。`"
+      style="margin-bottom: 8px"
+    />
+
+    <el-table
+      :data="rows"
+      border size="small"
+      v-loading="loading"
+      @selection-change="onSelectionChange"
+    >
+      <el-table-column type="selection" width="48" :selectable="() => true" />
       <el-table-column prop="ifname" label="接口" width="160" />
-      <el-table-column prop="kind" label="类型" width="110" />
-      <el-table-column label="本端 CIDR" min-width="140" show-overflow-tooltip>
-        <template #default="{ row }">{{ tunnelCidrs(row) }}</template>
-      </el-table-column>
-      <el-table-column prop="remark" label="备注" show-overflow-tooltip />
-      <el-table-column prop="updated_at" label="更新时间" width="190" />
-      <el-table-column label="操作" width="200" fixed="right">
+      <el-table-column label="类型" width="110">
         <template #default="{ row }">
-          <el-button link type="primary" @click="showJson(row)">JSON</el-button>
+          <el-tag size="small" :type="row.kind === 'wireguard' ? 'success' : row.kind === 'gre' ? 'primary' : 'warning'">
+            {{ row.kind }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column label="本端 CIDR" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">
+          <code class="mono">{{ tunnelCidrs(row) }}</code>
+        </template>
+      </el-table-column>
+      <el-table-column label="对端 / endpoint" min-width="200" show-overflow-tooltip>
+        <template #default="{ row }">
+          <code class="mono">{{ tunnelEndpoint(row) }}</code>
+        </template>
+      </el-table-column>
+      <el-table-column label="关联客户" width="200">
+        <template #default="{ row }">
+          <template v-if="row.customer_code">
+            <el-tag size="small" type="info">{{ row.customer_code }}</el-tag>
+            <span style="margin-left: 4px">{{ row.customer_name }}</span>
+          </template>
+          <template v-else-if="customerNameFor(row.ifname)">
+            <span class="muted" title="按 IP 分配回填，未显式绑定">{{ customerNameFor(row.ifname) }}</span>
+          </template>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
+      <el-table-column prop="updated_at" label="更新时间" width="170">
+        <template #default="{ row }">
+          <span class="mono">{{ (row.updated_at || '').replace('T', ' ').substring(0, 19) }}</span>
+        </template>
+      </el-table-column>
+      <el-table-column label="操作" width="150" fixed="right">
+        <template #default="{ row }">
           <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
           <el-button link type="danger" @click="remove(row)">删除</el-button>
         </template>
       </el-table-column>
+      <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip>
+        <template #default="{ row }">
+          <span v-if="row.remark">{{ row.remark }}</span>
+          <span v-else class="muted">—</span>
+        </template>
+      </el-table-column>
     </el-table>
 
-    <el-dialog v-model="dlg" :title="title" width="640px" destroy-on-close>
-      <el-form label-width="120px">
+    <el-dialog v-model="dlg" :title="title" width="820px" destroy-on-close top="6vh">
+      <el-form label-width="120px" size="small">
         <el-form-item label="类型">
           <el-radio-group v-model="kind" :disabled="Boolean(editingId)">
             <el-radio-button label="gre">GRE</el-radio-button>
@@ -366,91 +684,162 @@ onMounted(load)
           </el-radio-group>
         </el-form-item>
 
-        <template v-if="kind === 'gre'">
-          <el-form-item label="接口名" required>
-            <el-input v-model="gre.ifname" placeholder="例如 gre-pe1" :disabled="Boolean(editingId)" />
-          </el-form-item>
-          <el-form-item label="本端 IP/掩码" required>
-            <el-input v-model="gre.address_cidr" placeholder="CIDR，如 10.0.0.1/30" />
-          </el-form-item>
-          <el-form-item label="local" required>
-            <el-input v-model="gre.local" placeholder="本端隧道地址" />
-          </el-form-item>
-          <el-form-item label="remote" required>
-            <el-input v-model="gre.remote" placeholder="对端隧道地址" />
-          </el-form-item>
-          <el-form-item label="TTL">
-            <el-input-number v-model="gre.ttl" :min="1" :max="255" />
-          </el-form-item>
-          <el-form-item label="key (可选)">
-            <el-input v-model="gre.key" placeholder="数字密钥，可无" />
-          </el-form-item>
-        </template>
-
-        <template v-else-if="kind === 'vxlan'">
-          <el-form-item label="接口名" required>
-            <el-input v-model="vxlan.ifname" placeholder="例如 vxlan100" :disabled="Boolean(editingId)" />
-          </el-form-item>
-          <el-form-item label="本端 IP/掩码" required>
-            <el-input v-model="vxlan.address_cidr" placeholder="CIDR，如 192.168.10.1/24" />
-          </el-form-item>
-          <el-form-item label="VNI" required>
-            <el-input-number v-model="vxlan.vni" :min="1" :max="16777215" />
-          </el-form-item>
-          <el-form-item label="local">
-            <el-input v-model="vxlan.local" placeholder="源 VTEP IP" />
-          </el-form-item>
-          <el-form-item label="remote">
-            <el-input v-model="vxlan.remote" placeholder="远端 VTEP IP（点对多时可为空）" />
-          </el-form-item>
-          <el-form-item label="UDP 端口">
-            <el-input-number v-model="vxlan.port" :min="1" :max="65535" />
-          </el-form-item>
-          <el-form-item label="TTL">
-            <el-input-number v-model="vxlan.ttl" :min="1" :max="255" />
-          </el-form-item>
-        </template>
-
-        <template v-else>
-          <el-form-item label="接口名" required>
-            <el-input v-model="wg.ifname" placeholder="例如 wg-pe" :disabled="Boolean(editingId)" />
-          </el-form-item>
-          <el-form-item label="本端 IP/掩码(CIDR)" required>
-            <el-input v-model="wg.addresses" placeholder="如 10.200.0.5/24；多个用逗号分隔" />
-          </el-form-item>
-          <el-form-item label="监听端口">
-            <el-input-number v-model="wg.listen_port" :min="1" :max="65535" />
-          </el-form-item>
-          <el-form-item label="私钥">
-            <el-input v-model="wg.private_key" type="password" show-password autocomplete="off" />
-          </el-form-item>
-          <el-form-item label="对端公钥">
-            <el-input v-model="wg.peer_public_key" />
-          </el-form-item>
-          <el-form-item label="对端 endpoint">
-            <el-input v-model="wg.peer_endpoint" placeholder="host:51820" />
-          </el-form-item>
-          <el-form-item label="allowed_ips">
-            <el-input v-model="wg.peer_allowed_ips" />
-          </el-form-item>
-          <el-form-item label="keepalive(秒)">
-            <el-input-number v-model="wg.persistent_keepalive" :min="0" :max="65535" />
-          </el-form-item>
-        </template>
-
-        <el-form-item label="备注">
-          <el-input v-model="remark" />
+        <el-form-item label="关联客户">
+          <el-select
+            v-model="customerCode"
+            clearable filterable
+            placeholder="可选，仅用于业务关联与权限作用域；不会写入 netplan/wg-quick"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="c in customers"
+              :key="c.code"
+              :label="`${c.code} - ${c.name}`"
+              :value="c.code"
+            />
+          </el-select>
         </el-form-item>
+
+        <el-row :gutter="12">
+          <el-col :span="14">
+            <template v-if="kind === 'gre'">
+              <el-form-item label="接口名" required>
+                <el-input v-model="gre.ifname" placeholder="例如 gre-pe1" :disabled="Boolean(editingId)" />
+              </el-form-item>
+              <el-form-item label="本端 CIDR" required>
+                <el-input v-model="gre.address_cidr" placeholder="例如 10.0.0.1/30" />
+              </el-form-item>
+              <el-form-item label="对端 CIDR">
+                <el-input v-model="gre.remote_cidr" placeholder="对端隧道地址，仅用于生成对端预览" />
+              </el-form-item>
+              <el-form-item label="本端 (local)" required>
+                <el-input v-model="gre.local" placeholder="本端公网/承载 IP" />
+              </el-form-item>
+              <el-form-item label="对端 (remote)" required>
+                <el-input v-model="gre.remote" placeholder="对端公网/承载 IP" />
+              </el-form-item>
+              <el-form-item label="TTL">
+                <el-input-number v-model="gre.ttl" :min="1" :max="255" />
+              </el-form-item>
+              <el-form-item label="key (可选)">
+                <el-input v-model="gre.key" placeholder="数字密钥，可无" />
+              </el-form-item>
+            </template>
+
+            <template v-else-if="kind === 'vxlan'">
+              <el-form-item label="接口名" required>
+                <el-input v-model="vxlan.ifname" placeholder="例如 vxlan100" :disabled="Boolean(editingId)" />
+              </el-form-item>
+              <el-form-item label="本端 CIDR" required>
+                <el-input v-model="vxlan.address_cidr" placeholder="例如 192.168.10.1/24" />
+              </el-form-item>
+              <el-form-item label="对端 CIDR">
+                <el-input v-model="vxlan.remote_cidr" placeholder="对端隧道地址，仅用于生成对端预览" />
+              </el-form-item>
+              <el-form-item label="VNI" required>
+                <el-input-number v-model="vxlan.vni" :min="1" :max="16777215" />
+              </el-form-item>
+              <el-form-item label="本端 VTEP">
+                <el-input v-model="vxlan.local" placeholder="源 VTEP IP" />
+              </el-form-item>
+              <el-form-item label="对端 VTEP">
+                <el-input v-model="vxlan.remote" placeholder="远端 VTEP IP" />
+              </el-form-item>
+              <el-form-item label="UDP 端口">
+                <el-input-number v-model="vxlan.port" :min="1" :max="65535" />
+              </el-form-item>
+              <el-form-item label="TTL">
+                <el-input-number v-model="vxlan.ttl" :min="1" :max="255" />
+              </el-form-item>
+            </template>
+
+            <template v-else>
+              <el-form-item label="接口名" required>
+                <el-input v-model="wg.ifname" placeholder="例如 wg-pe" :disabled="Boolean(editingId)" />
+              </el-form-item>
+              <el-form-item label="本端 CIDR" required>
+                <el-input v-model="wg.addresses" placeholder="如 10.200.0.5/24；多个用逗号分隔" />
+              </el-form-item>
+              <el-form-item label="监听端口">
+                <el-input-number v-model="wg.listen_port" :min="1" :max="65535" />
+              </el-form-item>
+              <el-form-item label="私钥" required>
+                <div class="key-row">
+                  <el-input v-model="wg.private_key" type="password" show-password autocomplete="off" placeholder="可点击右侧按钮生成" />
+                  <el-button :loading="keyGenLoading" type="primary" @click="genWgKeyPair">
+                    <el-icon><Key /></el-icon><span>生成密钥对</span>
+                  </el-button>
+                </div>
+              </el-form-item>
+              <el-form-item label="本端公钥">
+                <div class="key-row">
+                  <el-input v-model="wg.public_key" readonly placeholder="点「生成密钥对」或「由私钥推导」自动填入" />
+                  <el-button @click="derivePublicKey">由私钥推导</el-button>
+                  <el-button :icon="CopyDocument" @click="copyText(wg.public_key)">复制</el-button>
+                </div>
+              </el-form-item>
+              <el-form-item label="对端公钥">
+                <el-input v-model="wg.peer_public_key" placeholder="对端发来的 public key (44 字符 base64)" />
+              </el-form-item>
+              <el-form-item label="对端 endpoint">
+                <el-input v-model="wg.peer_endpoint" placeholder="host:51820（本端为 Server 时可留空）" />
+              </el-form-item>
+              <el-form-item label="对端 CIDR">
+                <el-input v-model="wg.peer_addresses" placeholder="对端本机 CIDR，仅用于生成对端预览" />
+              </el-form-item>
+              <el-form-item label="allowed-ips">
+                <el-input v-model="wg.peer_allowed_ips" placeholder="对端允许的 IP/网段，逗号分隔" />
+              </el-form-item>
+              <el-form-item label="keepalive(s)">
+                <el-input-number v-model="wg.persistent_keepalive" :min="0" :max="65535" />
+              </el-form-item>
+            </template>
+
+            <el-form-item label="备注">
+              <el-input v-model="remark" type="textarea" :rows="2" />
+            </el-form-item>
+          </el-col>
+
+          <el-col :span="10">
+            <div class="preview-pane">
+              <div class="preview-title">本端配置（实时预览）</div>
+              <div class="preview-box">
+                <pre v-if="localConfigText">{{ localConfigText }}</pre>
+                <div v-else class="empty">填写左侧字段后自动生成</div>
+                <el-button
+                  v-if="localConfigText"
+                  size="small"
+                  class="copy-btn"
+                  :icon="CopyDocument"
+                  @click="copyText(localConfigText)"
+                >
+                  复制
+                </el-button>
+              </div>
+
+              <div class="preview-title" style="margin-top: 10px">对端客户配置</div>
+              <div class="preview-box">
+                <pre v-if="peerConfigText">{{ peerConfigText }}</pre>
+                <div v-else class="empty">填写「对端 CIDR」与必要字段后生成</div>
+                <el-button
+                  v-if="peerConfigText"
+                  size="small"
+                  class="copy-btn"
+                  :icon="CopyDocument"
+                  @click="copyText(peerConfigText)"
+                >
+                  复制
+                </el-button>
+              </div>
+            </div>
+          </el-col>
+        </el-row>
       </el-form>
       <template #footer>
         <el-button @click="dlg = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存到后端</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
       </template>
     </el-dialog>
-
-    <el-drawer v-model="drawerOpen" title="spec JSON" size="50%">
-      <JsonBlock v-if="drawerRow" :data="drawerRow" :rows="26" />
-    </el-drawer>
   </div>
 </template>
 
@@ -460,12 +849,60 @@ onMounted(load)
   flex-direction: column;
   gap: 12px;
 }
-.toolbar {
-  display: flex;
-  gap: 8px;
-  justify-content: flex-end;
+.mono {
+  font-family: var(--pe-mono);
+  font-size: 12px;
 }
-.hint {
+.muted {
+  color: var(--pe-text-mute);
+}
+.key-row {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.key-row :deep(.el-input) {
+  flex: 1;
+}
+.preview-pane {
+  position: sticky;
+  top: 0;
+}
+.preview-title {
+  font-size: 12px;
+  color: var(--pe-text-mute);
   margin-bottom: 4px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.preview-box {
+  position: relative;
+  background: #0f172a;
+  border-radius: var(--pe-radius);
+  border: 1px solid #1e293b;
+  min-height: 80px;
+}
+.preview-box pre {
+  margin: 0;
+  padding: 10px 12px;
+  color: #e2e8f0;
+  font-family: var(--pe-mono);
+  font-size: 11.5px;
+  line-height: 1.5;
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.preview-box .empty {
+  color: #64748b;
+  padding: 14px;
+  font-size: 12px;
+  text-align: center;
+}
+.copy-btn {
+  position: absolute;
+  top: 6px;
+  right: 6px;
 }
 </style>

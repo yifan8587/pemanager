@@ -1,0 +1,109 @@
+"""诊断工具的异步执行：用 threading 在后端进程内跑 ping / mtr，结果写入 DiagnosticsJob。
+
+设计：
+- 触发：POST /tools/ping/?async=1 或 count > ASYNC_THRESHOLD 自动启动。
+- 状态：DiagnosticsJob(status: queued → running → succeeded/failed)。
+- 结果：result JSON 字段，结构与同步 probes.ping/mtr 一致。
+- 进程模型：开发期单进程 dev server 直接 threading 即可；生产 (gunicorn) 同样可行。
+"""
+from __future__ import annotations
+
+import logging
+import threading
+import time
+from typing import Any
+
+from django.utils import timezone
+
+from operationmanage.models import DiagnosticsJob
+from operationmanage.services import probes
+
+log = logging.getLogger(__name__)
+
+# 超过该阈值时强制走异步（与前端约定一致）
+ASYNC_THRESHOLD = 10
+
+
+def _worker(job_id: str) -> None:
+    """后台线程入口。"""
+    try:
+        from django.db import close_old_connections
+
+        close_old_connections()
+        job = DiagnosticsJob.objects.get(pk=job_id)
+    except DiagnosticsJob.DoesNotExist:
+        log.warning('DiagnosticsJob %s not found in worker', job_id)
+        return
+
+    started = timezone.now()
+    DiagnosticsJob.objects.filter(pk=job_id).update(
+        status=DiagnosticsJob.Status.RUNNING, started_at=started
+    )
+
+    t0 = time.monotonic()
+    try:
+        if job.kind == DiagnosticsJob.Kind.PING:
+            result = probes.ping(
+                job.address,
+                count=int(job.count),
+                source=(job.source or '').strip() or None,
+            )
+        else:
+            result = probes.mtr(
+                job.address,
+                count=int(job.count),
+                source=(job.source or '').strip() or None,
+            )
+        ok = bool(result.get('ok'))
+        DiagnosticsJob.objects.filter(pk=job_id).update(
+            status=DiagnosticsJob.Status.SUCCEEDED if ok else DiagnosticsJob.Status.FAILED,
+            result=result,
+            error='' if ok else (result.get('error') or result.get('stderr') or '')[:1024],
+            finished_at=timezone.now(),
+            duration_ms=int((time.monotonic() - t0) * 1000),
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.exception('DiagnosticsJob %s 执行异常', job_id)
+        DiagnosticsJob.objects.filter(pk=job_id).update(
+            status=DiagnosticsJob.Status.FAILED,
+            error=str(exc)[:1024],
+            finished_at=timezone.now(),
+            duration_ms=int((time.monotonic() - t0) * 1000),
+        )
+    finally:
+        try:
+            close_old_connections()
+        except Exception:  # noqa: BLE001
+            pass
+
+
+def submit(kind: str, address: str, *, count: int, source: str | None) -> DiagnosticsJob:
+    """创建一条 DiagnosticsJob 并启动后台线程。立即返回 job 对象（status=queued）。"""
+    job = DiagnosticsJob.objects.create(
+        kind=kind,
+        address=(address or '').strip(),
+        source=(source or '').strip(),
+        count=int(count or 1),
+        status=DiagnosticsJob.Status.QUEUED,
+    )
+    t = threading.Thread(target=_worker, args=(str(job.id),), daemon=True, name=f'diag-{job.id}')
+    t.start()
+    return job
+
+
+def serialize(job: DiagnosticsJob) -> dict[str, Any]:
+    """序列化为 API/前端友好结构。"""
+    return {
+        'id': str(job.id),
+        'kind': job.kind,
+        'address': job.address,
+        'source': job.source,
+        'count': job.count,
+        'status': job.status,
+        'started_at': job.started_at.isoformat() if job.started_at else None,
+        'finished_at': job.finished_at.isoformat() if job.finished_at else None,
+        'duration_ms': job.duration_ms,
+        'result': job.result or {},
+        'error': job.error,
+        'created_at': job.created_at.isoformat(),
+    }

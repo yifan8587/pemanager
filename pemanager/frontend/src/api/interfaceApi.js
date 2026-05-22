@@ -13,6 +13,13 @@ export const interfaceApi = {
   liveDetail: (ifname) => http.get(`/api/interfacemanage/interfaces/${encodeURIComponent(ifname)}/`),
   exportInventory: (params) => http.get('/api/interfacemanage/interfaces/export/', { params }),
 
+  previewInterfaceConfig: (ifname, payload) =>
+    http.post(`/api/interfacemanage/interfaces/${encodeURIComponent(ifname)}/preview-config/`, payload),
+  applyInterfaceConfig: (ifname, payload) =>
+    http.post(`/api/interfacemanage/interfaces/${encodeURIComponent(ifname)}/apply-config/`, payload),
+  removeInterfaceConfig: (ifname) =>
+    http.post(`/api/interfacemanage/interfaces/${encodeURIComponent(ifname)}/remove-config/`),
+
   netplanSource: (params) => http.get('/api/interfacemanage/sources/netplan/', { params }),
   kernelSource: (params) => http.get('/api/interfacemanage/sources/kernel/', { params }),
   wireguardSource: (params) => http.get('/api/interfacemanage/sources/wireguard/', { params }),
@@ -37,6 +44,13 @@ export const interfaceApi = {
   patchDesiredTunnel: (id, payload) =>
     http.patch(`/api/interfacemanage/db/desired-tunnels/${id}/`, payload),
   deleteDesiredTunnel: (id) => http.delete(`/api/interfacemanage/db/desired-tunnels/${id}/`),
-  applyDesiredTunnelsToSystem: () =>
-    http.post('/api/interfacemanage/db/desired-tunnels/apply-system/'),
+  applyDesiredTunnelsToSystem: (ids) =>
+    http.post(
+      '/api/interfacemanage/db/desired-tunnels/apply-system/',
+      Array.isArray(ids) && ids.length ? { ids } : {},
+    ),
+
+  wgGenKey: () => http.post('/api/interfacemanage/tools/wg/genkey/'),
+  wgPubKey: (private_b64) =>
+    http.post('/api/interfacemanage/tools/wg/pubkey/', { private: private_b64 }),
 }

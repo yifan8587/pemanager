@@ -1,0 +1,20 @@
+2026-05-21 01:01:17.334 [info] [2026-05-21T01:01:17.333Z] [info] loadAllEnabledPlugins: no installed plugins metadata found (130.5ms)
+2026-05-21 01:01:17.334 [info] [2026-05-21T01:01:17.334Z] [info] marketplace listEnabledPlugins completed in 122.9ms (0 plugins)
+2026-05-21 01:01:17.334 [info] [2026-05-21T01:01:17.334Z] [info] loadFromMarketplaceSource completed in 123.0ms (0 plugins loaded, 0 failures)
+2026-05-21 01:01:17.335 [info] [2026-05-21T01:01:17.335Z] [info] loadUserLocalPlugins completed in 122.4ms (0 plugins loaded)
+2026-05-21 01:01:18.747 [info] [2026-05-21T01:01:18.747Z] [info] [cc-marketplace-import] cc-marketplace-import.start
+2026-05-21 01:01:18.748 [info] [2026-05-21T01:01:18.748Z] [info] marketplace listEnabledPlugins completed in 1537.5ms (0 plugins)
+2026-05-21 01:01:18.748 [info] [2026-05-21T01:01:18.748Z] [info] loadFromMarketplaceSource completed in 1537.7ms (0 plugins loaded, 0 failures)
+2026-05-21 01:01:18.748 [info] [2026-05-21T01:01:18.748Z] [info] loadAllPlugins completed in 1545.8ms (claude=true, userLocal=true, marketplace=2 sources, total=0 plugins, failures=0)
+2026-05-21 01:01:18.749 [info] [2026-05-21T01:01:18.748Z] [info] Plugins loaded in 1547.2ms
+2026-05-21 01:01:18.749 [info] [2026-05-21T01:01:18.749Z] [info] Plugins reload completed: 0 plugins loaded (0 extension), 0 failures
+2026-05-21 01:01:18.775 [info] [2026-05-21T01:01:18.775Z] [info] [cc-marketplace-import] cc-marketplace-import.readdirError
+2026-05-21 01:01:19.253 [info] [2026-05-21T01:01:19.253Z] [info] loadAllEnabledPlugins: no installed plugins metadata found (9.5ms)
+2026-05-21 01:01:19.254 [info] [2026-05-21T01:01:19.253Z] [info] marketplace listEnabledPlugins completed in 9.6ms (0 plugins)
+2026-05-21 01:01:19.254 [info] [2026-05-21T01:01:19.253Z] [info] loadFromMarketplaceSource completed in 9.8ms (0 plugins loaded, 0 failures)
+2026-05-21 01:01:19.254 [info] [2026-05-21T01:01:19.254Z] [info] loadUserLocalPlugins completed in 9.9ms (0 plugins loaded)
+2026-05-21 01:01:20.840 [info] [2026-05-21T01:01:20.840Z] [info] marketplace listEnabledPlugins completed in 1596.0ms (0 plugins)
+2026-05-21 01:01:20.840 [info] [2026-05-21T01:01:20.840Z] [info] loadFromMarketplaceSource completed in 1596.4ms (0 plugins loaded, 0 failures)
+2026-05-21 01:01:20.841 [info] [2026-05-21T01:01:20.840Z] [info] loadAllPlugins completed in 1596.9ms (claude=true, userLocal=true, marketplace=2 sources, total=0 plugins, failures=0)
+2026-05-21 01:01:20.841 [info] [2026-05-21T01:01:20.841Z] [info] Plugins loaded in 1597.4ms
+2026-05-21 01:01:20.841 [info] [2026-05-21T01:01:20.841Z] [info] Plugins reload completed: 0 plugins loaded (0 extension), 0 failures

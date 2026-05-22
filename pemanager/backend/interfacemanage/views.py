@@ -3,9 +3,14 @@ from __future__ import annotations
 import yaml
 from django.http import HttpResponse
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes as drf_permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from accountmanage.permissions import IsAdmin, ReadOnlyForCustomer, CustomerScopedWritable
+from accountmanage.scoped_mixins import AdminOnlyMixin
+from accountmanage.services.scope import scope_interface_codes, scope_qs, scope_customer, is_admin
 
 from interfacemanage.models import DesiredTunnelConfig, NetplanFileRecord, NetworkInterfaceRecord, NetworkSyncRun
 from interfacemanage.serializers import (
@@ -16,17 +21,20 @@ from interfacemanage.serializers import (
     NetworkSyncRunSerializer,
 )
 from interfacemanage.services import db_sync, iproute, netplan, unify, wireguard
-from interfacemanage.services import netplan_writing
+from interfacemanage.services import netplan_writing, netplan_interface_writing, wg_keytool
 
 APP_NAME = 'interfacemanage'
 
 
 @api_view(['GET'])
+@drf_permission_classes([AllowAny])
 def health(_request):
     return Response({'app': APP_NAME, 'status': 'ok'})
 
 
 class NetplanConfigView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
     """
     GET: 读取 /etc/netplan 下 YAML。
     ?format=yaml 返回合并后的 network 片段（纯文本 YAML）；
@@ -49,6 +57,7 @@ class NetplanConfigView(APIView):
 
 
 class KernelStateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
     """GET: 通过 ip -json（及 ip tunnel show）采集内核与隧道信息。"""
 
     def get(self, request):
@@ -69,6 +78,7 @@ class KernelStateView(APIView):
 
 
 class WireGuardStateView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
     """
     GET: `wg show` 聚合。
     ?reveal_secrets=1 显示私钥与 PSK（慎用，仅限受信环境）。
@@ -87,7 +97,11 @@ class InterfaceInventoryView(APIView):
     - kind: 按内核/隧道类型过滤，如 gre / vxlan / wireguard / ethernet
     - q: 对接口名模糊匹配
     - admin_up: true/false 按管理状态过滤
+
+    客户角色只能看到自己绑定的接口。
     """
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         np = netplan.load_netplan()
@@ -112,6 +126,12 @@ class InterfaceInventoryView(APIView):
             want = au.lower() in ('1', 'true', 'yes')
             rows = [r for r in rows if r.get('admin_up') is want]
 
+        # 客户作用域：只暴露与该客户接口集合相关的接口
+        scope_codes = scope_interface_codes(request.user)
+        if scope_codes is not None:
+            rows = [r for r in rows if r.get('ifname') in scope_codes]
+            stats = unify.summarize_by_kind(rows)
+
         return Response(
             {
                 'summary': stats,
@@ -129,7 +149,12 @@ class InterfaceInventoryView(APIView):
 class InterfaceDetailView(APIView):
     """GET: 单个接口的合并视图。"""
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, ifname: str):
+        scope_codes = scope_interface_codes(request.user)
+        if scope_codes is not None and ifname not in scope_codes:
+            return Response({'detail': f'无权访问接口 {ifname}'}, status=status.HTTP_403_FORBIDDEN)
         np = netplan.load_netplan()
         kernel = iproute.collect_kernel_snapshot()
         masked = request.query_params.get('reveal_secrets') != '1'
@@ -141,7 +166,73 @@ class InterfaceDetailView(APIView):
         return Response({'detail': f'接口 {ifname} 不存在或未出现在 ip link 中'}, status=status.HTTP_404_NOT_FOUND)
 
 
+class InterfacePreviewConfigView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    """
+    POST: 预览单接口的 netplan YAML，不写盘、不下发。
+    Body: {"kind": "ether", "spec": {...}}
+    """
+
+    def post(self, request, ifname: str):
+        kind = request.data.get('kind') or ''
+        spec = request.data.get('spec') or {}
+        if not isinstance(spec, dict):
+            return Response({'detail': 'spec 必须为对象'}, status=status.HTTP_400_BAD_REQUEST)
+        result = netplan_interface_writing.render_yaml(ifname=ifname, kind=str(kind), spec=spec)
+        code = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=code)
+
+
+class InterfaceApplyConfigView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    """
+    POST: 写入单接口的 netplan 片段并 netplan generate + try；
+    成功后立即触发 sync_network_state_from_system() 回写数据库。
+    Body: {"kind": "ether", "spec": {...}}
+    """
+
+    def post(self, request, ifname: str):
+        kind = request.data.get('kind') or ''
+        spec = request.data.get('spec') or {}
+        if not isinstance(spec, dict):
+            return Response({'detail': 'spec 必须为对象'}, status=status.HTTP_400_BAD_REQUEST)
+
+        result = netplan_interface_writing.apply_interface_netplan(
+            ifname=ifname, kind=str(kind), spec=spec
+        )
+        if not result.get('ok'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+
+        run = db_sync.sync_network_state_from_system()
+        result['db_sync'] = {
+            'success': run.success,
+            'duration_ms': (run.stats or {}).get('duration_ms'),
+            'error_message': run.error_message,
+        }
+        return Response(result, status=status.HTTP_200_OK)
+
+
+class InterfaceRemoveConfigView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+    """POST: 删除 pemanager 为该接口托管的 netplan 文件 + apply + 回写 DB。"""
+
+    def post(self, request, ifname: str):
+        result = netplan_interface_writing.remove_interface_netplan(ifname=ifname)
+        if not result.get('ok'):
+            return Response(result, status=status.HTTP_400_BAD_REQUEST)
+        run = db_sync.sync_network_state_from_system()
+        result['db_sync'] = {
+            'success': run.success,
+            'duration_ms': (run.stats or {}).get('duration_ms'),
+            'error_message': run.error_message,
+        }
+        return Response(result, status=status.HTTP_200_OK)
+
+
 class InterfaceExportView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
     """
     GET: 将当前合并接口表导出为 YAML 或 JSON，便于纳管与备份。
     format=json|yaml
@@ -165,12 +256,12 @@ class InterfaceExportView(APIView):
         return Response(body)
 
 
-class NetworkSyncRunViewSet(viewsets.ReadOnlyModelViewSet):
+class NetworkSyncRunViewSet(AdminOnlyMixin, viewsets.ReadOnlyModelViewSet):
     queryset = NetworkSyncRun.objects.all()
     serializer_class = NetworkSyncRunSerializer
 
 
-class NetplanFileRecordViewSet(viewsets.ReadOnlyModelViewSet):
+class NetplanFileRecordViewSet(AdminOnlyMixin, viewsets.ReadOnlyModelViewSet):
     queryset = NetplanFileRecord.objects.all().order_by('path')
     serializer_class = NetplanFileRecordSerializer
 
@@ -181,26 +272,70 @@ class NetplanFileRecordViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class NetworkInterfaceRecordViewSet(viewsets.ReadOnlyModelViewSet):
+    """接口数据库镜像：客户只能看到自己接口集合。"""
+
     queryset = NetworkInterfaceRecord.objects.all().order_by('ifindex', 'ifname')
     serializer_class = NetworkInterfaceRecordSerializer
     lookup_field = 'ifname'
+    permission_classes = [IsAuthenticated, ReadOnlyForCustomer]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        codes = scope_interface_codes(self.request.user)
+        if codes is None:
+            return qs
+        if not codes:
+            return qs.none()
+        return qs.filter(ifname__in=list(codes))
 
 
 class DesiredTunnelConfigViewSet(viewsets.ModelViewSet):
-    """GRE / VXLAN / WireGuard 意图配置：由前端录入并持久化，供后续下发 netplan 或运维使用。"""
+    """GRE / VXLAN / WireGuard 意图配置：由前端录入并持久化，供后续下发 netplan 或运维使用。
 
-    queryset = DesiredTunnelConfig.objects.all().order_by('kind', 'ifname')
+    可见性 = 客户 FK 命中 ∪ ifname 在客户能看到的接口码集合中。
+    客户可在自己作用域内 CRUD 与下发；下发时若传 `ids`，仅对选中的接口生效。
+    """
+
+    queryset = DesiredTunnelConfig.objects.all().select_related('customer').order_by('kind', 'ifname')
     serializer_class = DesiredTunnelConfigSerializer
+    permission_classes = [IsAuthenticated, CustomerScopedWritable]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        return scope_qs(qs, self.request.user, customer_field='customer', interface_field='ifname')
+
+    def _filter_ids_by_scope(self, request, ids):
+        """把用户传入的 ids 与可见 queryset 求交集；防止客户越权对外部接口下发。"""
+        if ids is None:
+            if is_admin(request.user):
+                return None  # admin 全量
+            # 非 admin 不传 ids = 视为下发"我作用域内全部"
+            return list(self.get_queryset().values_list('id', flat=True))
+        id_set = {str(i) for i in ids}
+        allowed = {str(x) for x in self.get_queryset().values_list('id', flat=True)}
+        return list(id_set & allowed)
 
     @action(detail=False, methods=['post'], url_path='apply-system')
     def apply_system(self, request):
-        """根据当前库中全部意图生成 netplan 片段，netplan generate + netplan try。"""
-        result = netplan_writing.apply_desired_tunnels_netplan()
+        """下发隧道意图到系统。
+
+        body:
+          - ids: 可选 list[str]；只下发选中的隧道接口（避免一次性重启全部 WG）。
+        若不传 ids：admin 走全量；客户走"自己作用域内全部"。
+        """
+        body = request.data if isinstance(request.data, dict) else {}
+        raw_ids = body.get('ids')
+        ids = self._filter_ids_by_scope(request, raw_ids)
+        if ids is not None and not ids:
+            return Response({'ok': False, 'error': '无可下发的接口（选中集合为空或越权）'},
+                            status=status.HTTP_400_BAD_REQUEST)
+        result = netplan_writing.apply_desired_tunnels_netplan(ids=ids)
         code = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=code)
 
 
 class SyncFromSystemView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
     """POST: 将系统当前 netplan + ip + wg 对齐写入数据库。"""
 
     def post(self, request):
@@ -211,7 +346,29 @@ class SyncFromSystemView(APIView):
 
 
 class NetworkDriftView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
     """GET: 对比「现场 unify」与数据库中的 content_sha256（不落库）。"""
 
     def get(self, request):
         return Response(db_sync.compute_live_drifts())
+
+
+class WireGuardGenKeyView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+    """POST: 生成 WireGuard 私钥 + 对应公钥。"""
+
+    def post(self, request):
+        result = wg_keytool.generate_keypair()
+        code = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=code)
+
+
+class WireGuardPubKeyView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+    """POST: 由 private 推导 public。Body: {"private": "<b64>"}。"""
+
+    def post(self, request):
+        priv = request.data.get('private') or ''
+        result = wg_keytool.derive_public(str(priv))
+        code = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
+        return Response(result, status=code)

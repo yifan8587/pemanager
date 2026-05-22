@@ -1,0 +1,97 @@
+2026-05-22 03:32:06.027 [info] Creating Indexing Repo client:  https://repo42.cursor.sh
+2026-05-22 03:32:06.027 [info] Creating repo client with backend url: https://repo42.cursor.sh
+2026-05-22 03:32:06.029 [info] Using existing keys for an index
+2026-05-22 03:32:06.029 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-22 03:32:06.069 [info] Using existing keys for an index
+2026-05-22 03:32:06.069 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-22 03:32:06.102 [info] Starting RepoIndexWatcher for repo: f10cb3fc-41f4-4c90-ac17-271b8320c80b, owner: google-oauth2|user_01JH21R6SFYWQ1EJ84SGZ44AWM
+2026-05-22 03:32:06.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 03:32:06.102 [info] Indexing job successfully done or aborted.
+2026-05-22 03:32:06.210 [warning] Failed to get symbolic ref: Failed to execute git
+2026-05-22 03:32:06.220 [info] Picked default branch from method 1.
+2026-05-22 03:32:06.254 [warning] Failed to get symbolic ref: Failed to execute git
+2026-05-22 03:32:06.287 [info] Picked default branch from method 1.
+2026-05-22 03:39:41.103 [info] multiCodebaseIndexingJob dispose
+2026-05-22 03:39:41.103 [info] Aborting indexing job.
+2026-05-22 03:39:41.103 [error] We currently do not allow indexing the home directory.
+2026-05-22 03:39:41.103 [info] Indexing job successfully done or aborted.
+2026-05-22 03:47:16.104 [info] multiCodebaseIndexingJob dispose
+2026-05-22 03:47:16.104 [info] Aborting indexing job.
+2026-05-22 03:47:16.104 [error] We currently do not allow indexing the home directory.
+2026-05-22 03:47:16.104 [info] Indexing job successfully done or aborted.
+2026-05-22 03:54:51.102 [info] multiCodebaseIndexingJob dispose
+2026-05-22 03:54:51.102 [info] Aborting indexing job.
+2026-05-22 03:54:51.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 03:54:51.102 [info] Indexing job successfully done or aborted.
+2026-05-22 04:02:26.102 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:02:26.102 [info] Aborting indexing job.
+2026-05-22 04:02:26.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:02:26.102 [info] Indexing job successfully done or aborted.
+2026-05-22 04:10:01.101 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:10:01.101 [info] Aborting indexing job.
+2026-05-22 04:10:01.101 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:10:01.101 [info] Indexing job successfully done or aborted.
+2026-05-22 04:17:36.102 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:17:36.102 [info] Aborting indexing job.
+2026-05-22 04:17:36.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:17:36.102 [info] Indexing job successfully done or aborted.
+2026-05-22 04:25:11.101 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:25:11.101 [info] Aborting indexing job.
+2026-05-22 04:25:11.101 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:25:11.101 [info] Indexing job successfully done or aborted.
+2026-05-22 04:32:46.101 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:32:46.102 [info] Aborting indexing job.
+2026-05-22 04:32:46.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:32:46.102 [info] Indexing job successfully done or aborted.
+2026-05-22 04:40:21.102 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:40:21.102 [info] Aborting indexing job.
+2026-05-22 04:40:21.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:40:21.102 [info] Indexing job successfully done or aborted.
+2026-05-22 04:47:56.102 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:47:56.102 [info] Aborting indexing job.
+2026-05-22 04:47:56.102 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:47:56.103 [info] Indexing job successfully done or aborted.
+2026-05-22 04:55:31.103 [info] multiCodebaseIndexingJob dispose
+2026-05-22 04:55:31.103 [info] Aborting indexing job.
+2026-05-22 04:55:31.104 [error] We currently do not allow indexing the home directory.
+2026-05-22 04:55:31.104 [info] Indexing job successfully done or aborted.
+2026-05-22 05:03:06.103 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:03:06.103 [info] Aborting indexing job.
+2026-05-22 05:03:06.103 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:03:06.103 [info] Indexing job successfully done or aborted.
+2026-05-22 05:10:41.104 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:10:41.104 [info] Aborting indexing job.
+2026-05-22 05:10:41.104 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:10:41.104 [info] Indexing job successfully done or aborted.
+2026-05-22 05:18:16.103 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:18:16.103 [info] Aborting indexing job.
+2026-05-22 05:18:16.103 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:18:16.103 [info] Indexing job successfully done or aborted.
+2026-05-22 05:25:51.103 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:25:51.103 [info] Aborting indexing job.
+2026-05-22 05:25:51.103 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:25:51.103 [info] Indexing job successfully done or aborted.
+2026-05-22 05:33:26.104 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:33:26.105 [info] Aborting indexing job.
+2026-05-22 05:33:26.105 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:33:26.105 [info] Indexing job successfully done or aborted.
+2026-05-22 05:41:01.105 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:41:01.105 [info] Aborting indexing job.
+2026-05-22 05:41:01.105 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:41:01.105 [info] Indexing job successfully done or aborted.
+2026-05-22 05:48:36.106 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:48:36.106 [info] Aborting indexing job.
+2026-05-22 05:48:36.106 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:48:36.106 [info] Indexing job successfully done or aborted.
+2026-05-22 05:56:11.106 [info] multiCodebaseIndexingJob dispose
+2026-05-22 05:56:11.106 [info] Aborting indexing job.
+2026-05-22 05:56:11.106 [error] We currently do not allow indexing the home directory.
+2026-05-22 05:56:11.106 [info] Indexing job successfully done or aborted.
+2026-05-22 06:03:46.107 [info] multiCodebaseIndexingJob dispose
+2026-05-22 06:03:46.107 [info] Aborting indexing job.
+2026-05-22 06:03:46.107 [error] We currently do not allow indexing the home directory.
+2026-05-22 06:03:46.107 [info] Indexing job successfully done or aborted.
+2026-05-22 06:11:21.106 [info] multiCodebaseIndexingJob dispose
+2026-05-22 06:11:21.106 [info] Aborting indexing job.
+2026-05-22 06:11:21.106 [error] We currently do not allow indexing the home directory.
+2026-05-22 06:11:21.106 [info] Indexing job successfully done or aborted.

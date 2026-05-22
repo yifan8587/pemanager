@@ -1,9 +1,17 @@
-from django.db.models import Count
+from django.db.models import Count, Sum
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes as drf_permission_classes
 from rest_framework.exceptions import ValidationError as DRFValidationError
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
+
+from accountmanage.permissions import IsAdmin, ReadOnlyForCustomer
+from accountmanage.scoped_mixins import (
+    AdminOnlyMixin,
+    CustomerScopedByCustomerFKMixin,
+)
+from accountmanage.services.scope import is_admin, scope_customer
 
 from resourcemanage.models import (
     BandwidthAllocation,
@@ -17,35 +25,47 @@ from resourcemanage.serializers import (
     BandwidthDeleteSerializer,
     BandwidthPoolSerializer,
     BandwidthUpsertSerializer,
-    InboundSyncSerializer,
     IPAddressEntrySerializer,
     IPAllocateSerializer,
+    IPAllocateWithRouteSerializer,
+    IPRecycleSerializer,
     IPReleaseSerializer,
     IPReserveSerializer,
+    IPRestoreSerializer,
     ResourceAllocationLogSerializer,
     ResourceCustomerSerializer,
 )
-from resourcemanage.services.inbound import apply_inbound_payload
 from resourcemanage.services import operations
 
 APP_NAME = 'resourcemanage'
 
 
 @api_view(['GET'])
+@drf_permission_classes([AllowAny])
 def health(_request):
     return Response({'app': APP_NAME, 'status': 'ok'})
 
 
 class ResourceCustomerViewSet(viewsets.ModelViewSet):
+    """客户档案：admin 可全管；客户账号只能看自己一条且只读。"""
+
     queryset = ResourceCustomer.objects.all().order_by('code')
     serializer_class = ResourceCustomerSerializer
+    permission_classes = [IsAuthenticated, ReadOnlyForCustomer]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        cust = scope_customer(self.request.user)
+        if cust is None:
+            return qs
+        return qs.filter(pk=cust.pk)
 
 
-class IPAddressEntryViewSet(viewsets.ModelViewSet):
+class IPAddressEntryViewSet(CustomerScopedByCustomerFKMixin, viewsets.ModelViewSet):
     queryset = IPAddressEntry.objects.select_related('customer').all().order_by('address')
     serializer_class = IPAddressEntrySerializer
 
-    @action(detail=False, methods=['post'], url_path='actions/reserve')
+    @action(detail=False, methods=['post'], url_path='actions/reserve', permission_classes=[IsAuthenticated, IsAdmin])
     def reserve(self, request):
         s = IPReserveSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -67,7 +87,7 @@ class IPAddressEntryViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(str(e)) from e
         return Response(IPAddressEntrySerializer(entry).data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], url_path='actions/allocate')
+    @action(detail=False, methods=['post'], url_path='actions/allocate', permission_classes=[IsAuthenticated, IsAdmin])
     def allocate(self, request):
         s = IPAllocateSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -88,31 +108,82 @@ class IPAddressEntryViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(str(e)) from e
         return Response(IPAddressEntrySerializer(entry).data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], url_path='actions/release')
+    @action(detail=False, methods=['post'], url_path='actions/release', permission_classes=[IsAuthenticated, IsAdmin])
     def release(self, request):
         s = IPReleaseSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         data = s.validated_data
         try:
-            operations.release_ip(
+            result = operations.release_ip(
                 address=str(data['address']),
                 actor=data.get('actor') or 'api',
             )
         except Exception as e:  # noqa: BLE001
             raise DRFValidationError(str(e)) from e
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/recycle', permission_classes=[IsAuthenticated, IsAdmin])
+    def recycle(self, request):
+        s = IPRecycleSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        try:
+            result = operations.recycle_ip(
+                address=str(data['address']),
+                reason=data.get('reason') or '',
+                actor=data.get('actor') or 'api',
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/restore', permission_classes=[IsAuthenticated, IsAdmin])
+    def restore(self, request):
+        s = IPRestoreSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        try:
+            entry = operations.restore_ip(
+                address=str(data['address']),
+                actor=data.get('actor') or 'api',
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(IPAddressEntrySerializer(entry).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/allocate-with-route', permission_classes=[IsAuthenticated, IsAdmin])
+    def allocate_with_route(self, request):
+        s = IPAllocateWithRouteSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        cust = ResourceCustomer.objects.filter(code=data['customer_code']).first()
+        if not cust:
+            raise DRFValidationError({'customer_code': '客户不存在'})
+        try:
+            result = operations.allocate_ip_with_route(
+                address=str(data['address']),
+                customer=cust,
+                interface_code=data.get('interface_code') or '',
+                subnet_label=data.get('subnet_label') or '',
+                allow_from_reserved=data.get('allow_from_reserved', True),
+                actor=data.get('actor') or 'api',
+                route=data.get('route') or None,
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(result, status=status.HTTP_200_OK)
 
 
-class BandwidthPoolViewSet(viewsets.ModelViewSet):
+class BandwidthPoolViewSet(AdminOnlyMixin, viewsets.ModelViewSet):
     queryset = BandwidthPool.objects.all().order_by('name')
     serializer_class = BandwidthPoolSerializer
 
 
-class BandwidthAllocationViewSet(viewsets.ModelViewSet):
+class BandwidthAllocationViewSet(CustomerScopedByCustomerFKMixin, viewsets.ModelViewSet):
     queryset = BandwidthAllocation.objects.select_related('pool', 'customer').all()
     serializer_class = BandwidthAllocationSerializer
 
-    @action(detail=False, methods=['post'], url_path='actions/upsert')
+    @action(detail=False, methods=['post'], url_path='actions/upsert', permission_classes=[IsAuthenticated, IsAdmin])
     def upsert(self, request):
         s = BandwidthUpsertSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -138,7 +209,7 @@ class BandwidthAllocationViewSet(viewsets.ModelViewSet):
             raise DRFValidationError(str(e)) from e
         return Response(BandwidthAllocationSerializer(alloc).data, status=status.HTTP_200_OK)
 
-    @action(detail=False, methods=['post'], url_path='actions/delete-by-key')
+    @action(detail=False, methods=['post'], url_path='actions/delete-by-key', permission_classes=[IsAuthenticated, IsAdmin])
     def delete_by_key(self, request):
         s = BandwidthDeleteSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -157,46 +228,163 @@ class BandwidthAllocationViewSet(viewsets.ModelViewSet):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class ResourceAllocationLogViewSet(viewsets.ReadOnlyModelViewSet):
+class ResourceAllocationLogViewSet(AdminOnlyMixin, viewsets.ReadOnlyModelViewSet):
     queryset = ResourceAllocationLog.objects.all()
     serializer_class = ResourceAllocationLogSerializer
 
 
 class ResourceSummaryAPIView(APIView):
-    """当前 PE 资源概览：IP 状态分布、带宽池用量。"""
+    permission_classes = [IsAuthenticated]
+    """
+    PE 系统级资源概览：客户 / IP / 带宽 三大维度。
+    返回结构（前端按"上(KPI) + 下(明细)"组织）：
+      customers: {total, active, inactive, recent: [{code,name,ip_count,bw_mbps}]}
+      ip:        {total, by_state: {available, reserved, allocated, recycled},
+                  by_customer: [{customer_code,customer_name,count}],
+                  by_subnet: [{subnet_label,count}]}
+      bandwidth: {pools: [...], total_mbps, allocated_mbps, remaining_mbps,
+                  by_customer: [{customer_code,customer_name,mbps,allocations}],
+                  allocations_total}
+    """
 
     def get(self, request):
-        ip_rows = IPAddressEntry.objects.values('state').annotate(c=Count('id'))
-        ip_stats = {row['state']: row['c'] for row in ip_rows}
-        pools = []
-        for p in BandwidthPool.objects.all().order_by('name'):
-            pools.append(
+        # 按客户作用域收紧 QuerySet：admin/operator → 全表；客户 → 仅自己
+        cust_scope = scope_customer(request.user)
+        cust_qs = ResourceCustomer.objects.all() if cust_scope is None else ResourceCustomer.objects.filter(pk=cust_scope.pk)
+        ip_qs = IPAddressEntry.objects.all() if cust_scope is None else IPAddressEntry.objects.filter(customer=cust_scope)
+        bw_qs = BandwidthAllocation.objects.all() if cust_scope is None else BandwidthAllocation.objects.filter(customer=cust_scope)
+
+        # ---- 客户 ----
+        cust_total = cust_qs.count()
+        cust_active = cust_qs.filter(is_active=True).count()
+        ip_count_by_cust = dict(
+            ip_qs.filter(customer__isnull=False)
+            .values_list('customer__code')
+            .annotate(c=Count('id'))
+            .values_list('customer__code', 'c')
+        )
+        bw_by_cust = dict(
+            bw_qs.filter(customer__isnull=False)
+            .values('customer__code')
+            .annotate(s=Sum('allocated_mbps'))
+            .values_list('customer__code', 's')
+        )
+        recent_customers = []
+        for c in cust_qs.order_by('-updated_at')[:10]:
+            recent_customers.append(
                 {
-                    'id': p.pk,
-                    'name': p.name,
-                    'total_mbps': p.total_mbps,
-                    'allocated_mbps': p.allocated_mbps(),
-                    'remaining_mbps': p.remaining_mbps(),
+                    'code': c.code,
+                    'name': c.name,
+                    'is_active': c.is_active,
+                    'ip_count': int(ip_count_by_cust.get(c.code, 0) or 0),
+                    'bw_mbps': int(bw_by_cust.get(c.code, 0) or 0),
+                    'updated_at': c.updated_at.isoformat() if c.updated_at else None,
                 }
             )
-        return Response({'ip_by_state': ip_stats, 'bandwidth_pools': pools})
-
-
-class InboundSyncAPIView(APIView):
-    """供其他应用在配置变更后回写资源"""
-
-    def post(self, request):
-        s = InboundSyncSerializer(data=request.data)
-        s.is_valid(raise_exception=True)
-        data = s.validated_data
-        payload = {
-            'ip_updates': data.get('ip_updates') or [],
-            'bandwidth_updates': data.get('bandwidth_updates') or [],
-            'bandwidth_removals': data.get('bandwidth_removals') or [],
+        customers_block = {
+            'total': cust_total,
+            'active': cust_active,
+            'inactive': cust_total - cust_active,
+            'recent': recent_customers,
         }
-        result = apply_inbound_payload(
-            payload,
-            source_app=data['source_app'],
-            actor=data.get('actor') or 'sync',
+
+        # ---- IP ----
+        ip_by_state_raw = dict(
+            ip_qs.values('state').annotate(c=Count('id')).values_list('state', 'c')
         )
-        return Response(result, status=status.HTTP_200_OK)
+        ip_states = {
+            'available': int(ip_by_state_raw.get(IPAddressEntry.State.AVAILABLE, 0)),
+            'reserved': int(ip_by_state_raw.get(IPAddressEntry.State.RESERVED, 0)),
+            'allocated': int(ip_by_state_raw.get(IPAddressEntry.State.ALLOCATED, 0)),
+            'recycled': int(ip_by_state_raw.get(IPAddressEntry.State.RECYCLED, 0)),
+        }
+        ip_total = sum(ip_states.values())
+        ip_by_customer = []
+        for row in (
+            ip_qs.filter(customer__isnull=False)
+            .values('customer__code', 'customer__name')
+            .annotate(c=Count('id'))
+            .order_by('-c', 'customer__code')[:20]
+        ):
+            ip_by_customer.append(
+                {
+                    'customer_code': row['customer__code'],
+                    'customer_name': row['customer__name'],
+                    'count': int(row['c']),
+                }
+            )
+        ip_by_subnet = []
+        for row in (
+            ip_qs.exclude(subnet_label='')
+            .values('subnet_label')
+            .annotate(c=Count('id'))
+            .order_by('-c', 'subnet_label')[:20]
+        ):
+            ip_by_subnet.append({'subnet_label': row['subnet_label'], 'count': int(row['c'])})
+        ip_block = {
+            'total': ip_total,
+            'by_state': ip_states,
+            'by_customer': ip_by_customer,
+            'by_subnet': ip_by_subnet,
+        }
+
+        # ---- 带宽 ----
+        pools_out = []
+        total_mbps = 0
+        allocated_mbps = 0
+        # 客户视角不暴露"系统总池"，只展示与自己客户相关的分配汇总
+        if cust_scope is None:
+            for p in BandwidthPool.objects.all().order_by('name'):
+                ap = p.allocated_mbps()
+                rp = p.remaining_mbps()
+                pools_out.append(
+                    {
+                        'id': p.pk,
+                        'name': p.name,
+                        'total_mbps': int(p.total_mbps),
+                        'allocated_mbps': int(ap),
+                        'remaining_mbps': int(rp),
+                        'usage_pct': (round(ap * 100.0 / p.total_mbps, 2) if p.total_mbps else 0.0),
+                        'remark': p.remark,
+                    }
+                )
+                total_mbps += int(p.total_mbps)
+                allocated_mbps += int(ap)
+        else:
+            allocated_mbps = int(bw_qs.aggregate(s=Sum('allocated_mbps'))['s'] or 0)
+            total_mbps = allocated_mbps
+        bw_by_cust_rows = []
+        for row in (
+            bw_qs.filter(customer__isnull=False)
+            .values('customer__code', 'customer__name')
+            .annotate(s=Sum('allocated_mbps'), c=Count('id'))
+            .order_by('-s', 'customer__code')[:20]
+        ):
+            bw_by_cust_rows.append(
+                {
+                    'customer_code': row['customer__code'],
+                    'customer_name': row['customer__name'],
+                    'mbps': int(row['s'] or 0),
+                    'allocations': int(row['c'] or 0),
+                }
+            )
+        bandwidth_block = {
+            'pools': pools_out,
+            'total_mbps': total_mbps,
+            'allocated_mbps': allocated_mbps,
+            'remaining_mbps': max(0, total_mbps - allocated_mbps),
+            'usage_pct': (round(allocated_mbps * 100.0 / total_mbps, 2) if total_mbps else 0.0),
+            'allocations_total': bw_qs.count(),
+            'by_customer': bw_by_cust_rows,
+        }
+
+        return Response(
+            {
+                'customers': customers_block,
+                'ip': ip_block,
+                'bandwidth': bandwidth_block,
+                # 兼容旧字段（避免老客户端报错）
+                'ip_by_state': ip_states,
+                'bandwidth_pools': pools_out,
+            }
+        )

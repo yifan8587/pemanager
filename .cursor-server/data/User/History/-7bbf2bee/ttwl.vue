@@ -1,0 +1,702 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Filter, Refresh, View, Upload, Plus } from '@element-plus/icons-vue'
+import { routeApi } from '../../api/routeApi'
+import PageHeader from '../../components/PageHeader.vue'
+
+const activeTab = ref('intent')
+const loading = ref(false)
+const rows = ref([])
+const search = ref('')
+
+const filtered = computed(() => {
+  const kw = (search.value || '').trim().toLowerCase()
+  if (!kw) return rows.value
+  return rows.value.filter((r) => {
+    return (
+      (r.name || '').toLowerCase().includes(kw) ||
+      (r.from_cidr || '').toLowerCase().includes(kw) ||
+      (r.to_cidr || '').toLowerCase().includes(kw) ||
+      (r.iif || '').toLowerCase().includes(kw) ||
+      (r.oif || '').toLowerCase().includes(kw) ||
+      (r.fwmark || '').toLowerCase().includes(kw) ||
+      String(r.table_id || '').includes(kw) ||
+      String(r.priority || '').includes(kw)
+    )
+  })
+})
+
+const stats = computed(() => {
+  const total = rows.value.length
+  const enabled = rows.value.filter((r) => r.enabled).length
+  const ipv6 = rows.value.filter((r) => r.family === 'inet6').length
+  return { total, enabled, disabled: total - enabled, ipv4: total - ipv6, ipv6 }
+})
+
+const dlg = ref(false)
+const saving = ref(false)
+const editingId = ref(null)
+const form = reactive({
+  name: '',
+  priority: 10000,
+  family: 'inet',
+  invert: false,
+  from_cidr: '',
+  to_cidr: '',
+  iif: '',
+  oif: '',
+  fwmark: '',
+  tos: '',
+  suppress_prefixlength: null,
+  action: 'lookup',
+  table_id: 100,
+  nat_target: null,
+  enabled: true,
+  remark: '',
+})
+const title = computed(() => (editingId.value ? '编辑策略路由' : '新增策略路由'))
+
+const actionOptions = [
+  { value: 'lookup', label: 'lookup table（查路由表）' },
+  { value: 'blackhole', label: 'blackhole（黑洞）' },
+  { value: 'unreachable', label: 'unreachable（不可达）' },
+  { value: 'prohibit', label: 'prohibit（禁止）' },
+  { value: 'nat', label: 'nat（NAT）' },
+]
+
+const familyOptions = [
+  { value: 'inet', label: 'IPv4 (inet)' },
+  { value: 'inet6', label: 'IPv6 (inet6)' },
+]
+
+const previewCmd = computed(() => {
+  const args = []
+  const ipBin = form.family === 'inet6' ? 'ip -6 rule add' : 'ip -4 rule add'
+  if (form.priority != null) args.push('priority', String(form.priority))
+  if (form.invert) args.push('not')
+  args.push('from', (form.from_cidr || 'all').trim() || 'all')
+  if ((form.to_cidr || '').trim()) args.push('to', form.to_cidr.trim())
+  if ((form.iif || '').trim()) args.push('iif', form.iif.trim())
+  if ((form.oif || '').trim()) args.push('oif', form.oif.trim())
+  if ((form.fwmark || '').trim()) args.push('fwmark', form.fwmark.trim())
+  if ((form.tos || '').trim()) args.push('tos', form.tos.trim())
+  if (form.suppress_prefixlength != null) args.push('suppress_prefixlength', String(form.suppress_prefixlength))
+  if (form.action === 'lookup') args.push('lookup', String(form.table_id ?? ''))
+  else if (form.action === 'nat') args.push('nat', String(form.nat_target ?? ''))
+  else args.push(form.action)
+  return `${ipBin} ${args.join(' ')}`
+})
+
+function resetForm() {
+  Object.assign(form, {
+    name: '',
+    priority: 10000,
+    family: 'inet',
+    invert: false,
+    from_cidr: '',
+    to_cidr: '',
+    iif: '',
+    oif: '',
+    fwmark: '',
+    tos: '',
+    suppress_prefixlength: null,
+    action: 'lookup',
+    table_id: 100,
+    nat_target: null,
+    enabled: true,
+    remark: '',
+  })
+}
+
+function openCreate() {
+  editingId.value = null
+  resetForm()
+  dlg.value = true
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  Object.assign(form, {
+    name: row.name || '',
+    priority: row.priority ?? null,
+    family: row.family || 'inet',
+    invert: !!row.invert,
+    from_cidr: row.from_cidr || '',
+    to_cidr: row.to_cidr || '',
+    iif: row.iif || '',
+    oif: row.oif || '',
+    fwmark: row.fwmark || '',
+    tos: row.tos || '',
+    suppress_prefixlength: row.suppress_prefixlength ?? null,
+    action: row.action || 'lookup',
+    table_id: row.table_id ?? null,
+    nat_target: row.nat_target ?? null,
+    enabled: row.enabled !== false,
+    remark: row.remark || '',
+  })
+  dlg.value = true
+}
+
+function buildBody() {
+  return {
+    name: (form.name || '').trim(),
+    priority: form.priority != null && form.priority !== '' ? Number(form.priority) : null,
+    family: form.family,
+    invert: !!form.invert,
+    from_cidr: (form.from_cidr || '').trim(),
+    to_cidr: (form.to_cidr || '').trim(),
+    iif: (form.iif || '').trim(),
+    oif: (form.oif || '').trim(),
+    fwmark: (form.fwmark || '').trim(),
+    tos: (form.tos || '').trim(),
+    suppress_prefixlength: form.suppress_prefixlength ?? null,
+    action: form.action,
+    table_id: form.action === 'lookup' ? Number(form.table_id) : null,
+    nat_target: form.action === 'nat' ? form.nat_target : null,
+    enabled: !!form.enabled,
+    remark: (form.remark || '').trim(),
+  }
+}
+
+async function save() {
+  saving.value = true
+  try {
+    const body = buildBody()
+    if (editingId.value) {
+      await routeApi.patchPolicyRule(editingId.value, body)
+      ElMessage.success('已更新')
+    } else {
+      await routeApi.createPolicyRule(body)
+      ElMessage.success('已保存')
+    }
+    dlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  try {
+    await ElMessageBox.confirm(
+      `删除策略路由 priority=${row.priority ?? '(auto)'} ${row.summary || ''}？`,
+      '确认删除',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await routeApi.deletePolicyRule(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '删除失败')
+  }
+}
+
+async function toggleEnable(row) {
+  try {
+    await routeApi.patchPolicyRule(row.id, { enabled: !row.enabled })
+    ElMessage.success(row.enabled ? '已停用' : '已启用')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '操作失败')
+  }
+}
+
+// ===== 系统 ip rule =====
+const sysRules = ref({ ok: false, rules: [], stderr: '' })
+const loadingSys = ref(false)
+const sysFamily = ref('')
+const sysSearch = ref('')
+const sysFilteredRules = computed(() => {
+  const kw = (sysSearch.value || '').trim().toLowerCase()
+  if (!kw) return sysRules.value.rules || []
+  return (sysRules.value.rules || []).filter((r) => {
+    return (
+      String(r.priority ?? '').includes(kw) ||
+      (r.from || '').toLowerCase().includes(kw) ||
+      (r.to || '').toLowerCase().includes(kw) ||
+      String(r.table || '').toLowerCase().includes(kw) ||
+      (r.iif || '').toLowerCase().includes(kw) ||
+      (r.oif || '').toLowerCase().includes(kw)
+    )
+  })
+})
+
+async function loadSysRules() {
+  loadingSys.value = true
+  try {
+    sysRules.value = await routeApi.listSystemRules(sysFamily.value ? { family: sysFamily.value } : {})
+    if (!sysRules.value.ok) {
+      ElMessage.warning(sysRules.value.stderr || '读取 ip rule 失败（需 ip 命令权限）')
+    }
+  } catch (e) {
+    sysRules.value = { ok: false, rules: [], stderr: e?.message || '' }
+    ElMessage.error('加载 ip rule 失败')
+  } finally {
+    loadingSys.value = false
+  }
+}
+
+// ===== 下发 =====
+const previewing = ref(false)
+const applying = ref(false)
+const previewResult = ref({ commands: [], owned_range: [10000, 19999], hint: '' })
+const lastApplyResult = ref(null)
+
+async function fetchPreview() {
+  previewing.value = true
+  try {
+    previewResult.value = await routeApi.previewPolicyRules()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '预览失败')
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function applyAll() {
+  try {
+    await ElMessageBox.confirm(
+      `将清理 priority 在 [${previewResult.value.owned_range?.[0]}, ${previewResult.value.owned_range?.[1]}] 范围内的旧 ip rule，并按当前意图重新下发。是否继续？`,
+      '策略路由下发',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  applying.value = true
+  lastApplyResult.value = null
+  try {
+    const { data } = await routeApi.applyPolicyRules({ phase: 'full' })
+    lastApplyResult.value = data
+    if (data.ok) {
+      ElMessage.success(`已下发 ${data.added} 条 ip rule（清理 ${data.flushed} 条旧规则）`)
+      await loadSysRules()
+    } else {
+      await ElMessageBox.alert(
+        `<pre style="white-space:pre-wrap;font-size:12px;max-height:420px;overflow:auto">${JSON.stringify(data, null, 2)}</pre>`,
+        '下发失败',
+        { dangerouslyUseHTMLString: true },
+      )
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    lastApplyResult.value = d
+    await ElMessageBox.alert(
+      `<pre style="white-space:pre-wrap;font-size:12px">${JSON.stringify(d || e.message, null, 2)}</pre>`,
+      '请求失败',
+      { dangerouslyUseHTMLString: true },
+    )
+  } finally {
+    applying.value = false
+  }
+}
+
+async function load() {
+  loading.value = true
+  try {
+    rows.value = await routeApi.listPolicyRules()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+function refreshAll() {
+  load()
+  loadSysRules()
+  fetchPreview()
+}
+
+onMounted(() => {
+  refreshAll()
+})
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader
+      title="策略路由"
+      description="维护 ip rule 等价的策略路由意图：按 from/to/iif/oif/fwmark 等条件分流到指定路由表"
+      :icon="Filter"
+    >
+      <template #actions>
+        <el-button :icon="Refresh" @click="refreshAll" :loading="loading">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新增策略</el-button>
+      </template>
+    </PageHeader>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">策略意图</div>
+        <div class="kpi-value">{{ stats.total }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">启用</div>
+        <div class="kpi-value ok">{{ stats.enabled }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">停用</div>
+        <div class="kpi-value muted">{{ stats.disabled }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">IPv4 / IPv6</div>
+        <div class="kpi-value">{{ stats.ipv4 }} <span class="sep">/</span> {{ stats.ipv6 }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">受控 priority 范围</div>
+        <div class="kpi-value mono">{{ previewResult.owned_range?.[0] }} - {{ previewResult.owned_range?.[1] }}</div>
+      </div>
+    </div>
+
+    <el-tabs v-model="activeTab" type="border-card" class="route-tabs">
+      <!-- 策略意图 -->
+      <el-tab-pane name="intent">
+        <template #label>
+          <span><el-icon><Filter /></el-icon> 策略意图</span>
+        </template>
+
+        <div class="toolbar">
+          <el-input v-model="search" placeholder="搜索 priority / from / to / table" clearable size="small" style="width: 280px" />
+          <div class="spacer" />
+          <el-button :loading="loading" :icon="Refresh" @click="load">刷新</el-button>
+        </div>
+
+        <el-table :data="filtered" border size="small" v-loading="loading" stripe>
+          <el-table-column label="启用" width="80">
+            <template #default="{ row }">
+              <el-switch :model-value="row.enabled" @change="toggleEnable(row)" />
+            </template>
+          </el-table-column>
+          <el-table-column label="priority" width="100">
+            <template #default="{ row }">
+              <code class="mono">{{ row.priority ?? '(auto)' }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="家族" width="80">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.family === 'inet6' ? 'warning' : 'info'">
+                {{ row.family === 'inet6' ? 'IPv6' : 'IPv4' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="from" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code class="mono">{{ row.from_cidr || 'all' }}</code>
+              <el-tag v-if="row.invert" type="danger" size="small" style="margin-left: 4px">not</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="to" min-width="140" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code v-if="row.to_cidr" class="mono">{{ row.to_cidr }}</code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="iif/oif" width="140">
+            <template #default="{ row }">
+              <code v-if="row.iif || row.oif" class="mono">
+                <span v-if="row.iif">iif {{ row.iif }}</span>
+                <span v-if="row.iif && row.oif"> · </span>
+                <span v-if="row.oif">oif {{ row.oif }}</span>
+              </code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="fwmark" width="120">
+            <template #default="{ row }">
+              <code v-if="row.fwmark" class="mono">{{ row.fwmark }}</code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="动作" min-width="160">
+            <template #default="{ row }">
+              <el-tag size="small">{{ row.action_label || row.action }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="name" label="名称" min-width="140" show-overflow-tooltip />
+          <el-table-column prop="remark" label="备注" min-width="120" show-overflow-tooltip />
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button link type="danger" @click="remove(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+
+      <!-- 系统 ip rule -->
+      <el-tab-pane name="system">
+        <template #label>
+          <span><el-icon><View /></el-icon> 系统 ip rule</span>
+        </template>
+
+        <div class="toolbar">
+          <el-radio-group v-model="sysFamily" size="small" @change="loadSysRules">
+            <el-radio-button label="">全部</el-radio-button>
+            <el-radio-button label="inet">IPv4</el-radio-button>
+            <el-radio-button label="inet6">IPv6</el-radio-button>
+          </el-radio-group>
+          <el-input v-model="sysSearch" placeholder="搜索 priority / from / to / table" clearable size="small" style="width: 280px" />
+          <div class="spacer" />
+          <el-button :loading="loadingSys" :icon="Refresh" @click="loadSysRules">查询</el-button>
+        </div>
+
+        <el-table :data="sysFilteredRules" border size="small" v-loading="loadingSys" stripe>
+          <el-table-column label="priority" width="100">
+            <template #default="{ row }">
+              <code class="mono">{{ row.priority ?? '—' }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="家族" width="80">
+            <template #default="{ row }">
+              <el-tag size="small" :type="row.family === 'inet6' ? 'warning' : 'info'">
+                {{ row.family === 'inet6' ? 'IPv6' : 'IPv4' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="from" min-width="140">
+            <template #default="{ row }">
+              <code class="mono">{{ row.from || 'all' }}</code>
+              <el-tag v-if="row.invert" type="danger" size="small" style="margin-left: 4px">not</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column label="to" min-width="140">
+            <template #default="{ row }">
+              <code v-if="row.to" class="mono">{{ row.to }}</code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="iif/oif" width="160">
+            <template #default="{ row }">
+              <code v-if="row.iif || row.oif" class="mono">
+                <span v-if="row.iif">iif {{ row.iif }}</span>
+                <span v-if="row.iif && row.oif"> · </span>
+                <span v-if="row.oif">oif {{ row.oif }}</span>
+              </code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="fwmark" width="120">
+            <template #default="{ row }">
+              <code v-if="row.fwmark" class="mono">{{ row.fwmark }}</code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="table" label="table" width="120" />
+          <el-table-column prop="action" label="action" width="100" />
+          <el-table-column prop="protocol" label="protocol" width="100" />
+        </el-table>
+        <p v-if="!sysRules.ok && sysRules.stderr" class="err-note">{{ sysRules.stderr }}</p>
+      </el-tab-pane>
+
+      <!-- 下发 -->
+      <el-tab-pane name="deploy">
+        <template #label>
+          <span><el-icon><Upload /></el-icon> 下发到内核</span>
+        </template>
+
+        <el-card shadow="never" class="dep-card">
+          <template #header>
+            <div class="card-hd">
+              <span class="title">下发策略路由（ip rule）</span>
+              <el-tag size="small">{{ previewResult.commands?.length || 0 }} 条命令</el-tag>
+            </div>
+          </template>
+
+          <el-alert :title="previewResult.hint" type="info" show-icon :closable="false" style="margin-bottom: 12px" />
+
+          <div class="deploy-actions">
+            <el-button :loading="previewing" :icon="View" @click="fetchPreview">1. 预览命令</el-button>
+            <el-button type="primary" :loading="applying" :icon="Upload" @click="applyAll">2. 下发 (ip rule)</el-button>
+          </div>
+
+          <el-form-item label="ip rule 命令">
+            <el-input
+              :model-value="(previewResult.commands || []).join('\n')"
+              type="textarea"
+              :rows="10"
+              readonly
+              placeholder="点击「预览命令」生成将要执行的 ip rule 命令"
+              class="mono"
+            />
+          </el-form-item>
+
+          <el-collapse v-if="lastApplyResult">
+            <el-collapse-item title="最近一次下发结果（raw）" name="1">
+              <pre class="raw">{{ JSON.stringify(lastApplyResult, null, 2) }}</pre>
+            </el-collapse-item>
+          </el-collapse>
+        </el-card>
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- 编辑/新增 -->
+    <el-dialog v-model="dlg" :title="title" width="780px" destroy-on-close>
+      <el-form label-width="150px" label-position="right">
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="名称">
+              <el-input v-model="form.name" placeholder="选填，便于识别" />
+            </el-form-item>
+            <el-form-item label="优先级 priority">
+              <el-input-number v-model="form.priority" :min="0" :max="2147483647" controls-position="right" style="width: 100%" />
+              <div class="hint-line">建议落在受控区间 {{ previewResult.owned_range?.[0] }} - {{ previewResult.owned_range?.[1] }}</div>
+            </el-form-item>
+            <el-form-item label="家族">
+              <el-radio-group v-model="form.family">
+                <el-radio-button v-for="o in familyOptions" :key="o.value" :label="o.value">{{ o.label }}</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="取反 not">
+              <el-switch v-model="form.invert" />
+            </el-form-item>
+            <el-form-item label="启用">
+              <el-switch v-model="form.enabled" />
+            </el-form-item>
+            <el-form-item label="备注">
+              <el-input v-model="form.remark" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-divider content-position="left">匹配条件</el-divider>
+            <el-form-item label="from (源 CIDR)">
+              <el-input v-model="form.from_cidr" placeholder="如 10.0.0.0/24，留空=all" />
+            </el-form-item>
+            <el-form-item label="to (目的 CIDR)">
+              <el-input v-model="form.to_cidr" placeholder="可选" />
+            </el-form-item>
+            <el-form-item label="iif (入接口)">
+              <el-input v-model="form.iif" placeholder="如 eth0" />
+            </el-form-item>
+            <el-form-item label="oif (出接口)">
+              <el-input v-model="form.oif" placeholder="如 wg01" />
+            </el-form-item>
+            <el-form-item label="fwmark">
+              <el-input v-model="form.fwmark" placeholder="如 0x1 或 1/0xff" />
+            </el-form-item>
+            <el-form-item label="tos">
+              <el-input v-model="form.tos" placeholder="可选" />
+            </el-form-item>
+            <el-form-item label="suppress_prefixlength">
+              <el-input-number
+                v-model="form.suppress_prefixlength"
+                :min="0"
+                :max="128"
+                controls-position="right"
+                style="width: 100%"
+              />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">动作</el-divider>
+        <el-row :gutter="12">
+          <el-col :span="12">
+            <el-form-item label="action">
+              <el-select v-model="form.action" style="width: 100%">
+                <el-option v-for="o in actionOptions" :key="o.value" :label="o.label" :value="o.value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item v-if="form.action === 'lookup'" label="路由表 table">
+              <el-input-number v-model="form.table_id" :min="0" :max="4294967295" controls-position="right" style="width: 100%" />
+            </el-form-item>
+            <el-form-item v-else-if="form.action === 'nat'" label="NAT 目标 IP">
+              <el-input v-model="form.nat_target" placeholder="目标地址" />
+            </el-form-item>
+          </el-col>
+        </el-row>
+
+        <el-divider content-position="left">命令预览</el-divider>
+        <pre class="cmd-preview">{{ previewCmd }}</pre>
+      </el-form>
+      <template #footer>
+        <el-button @click="dlg = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.kpi {
+  background: var(--pe-card);
+  border: 1px solid var(--pe-border-soft);
+  border-radius: var(--pe-radius);
+  padding: 12px 14px;
+  box-shadow: var(--pe-shadow-sm);
+}
+.kpi-label { font-size: 12px; color: var(--pe-text-mute); }
+.kpi-value { font-size: 22px; font-weight: 700; margin-top: 2px; color: var(--pe-text); }
+.kpi-value.ok { color: var(--el-color-success); }
+.kpi-value.muted { color: var(--pe-text-mute); }
+.kpi-value .sep { color: var(--pe-text-mute); font-weight: 400; }
+
+.route-tabs { background: var(--pe-card); }
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.spacer { flex: 1; }
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+.muted { color: var(--pe-text-mute); }
+.err-note { color: var(--el-color-danger); font-size: 12px; margin-top: 8px; }
+
+.dep-card .card-hd { display: flex; gap: 8px; align-items: center; }
+.dep-card .card-hd .title { font-weight: 600; }
+.deploy-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.cmd-preview {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 12px 14px;
+  border-radius: 6px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.hint-line { font-size: 11px; color: var(--pe-text-mute); margin-top: 2px; }
+.raw {
+  white-space: pre-wrap;
+  font-size: 12px;
+  max-height: 320px;
+  overflow: auto;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 6px;
+  margin: 0;
+}
+.mono :deep(textarea) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+</style>

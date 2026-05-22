@@ -1,0 +1,1079 @@
+<script setup>
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  ArrowLeft,
+  Connection,
+  Refresh,
+  Edit,
+  Upload,
+  View,
+  Close,
+  Plus,
+  Delete,
+  CopyDocument,
+} from '@element-plus/icons-vue'
+import { interfaceApi } from '../../api/interfaceApi'
+import { resourceApi } from '../../api/resourceApi'
+import PageHeader from '../../components/PageHeader.vue'
+
+const route = useRoute()
+const router = useRouter()
+const loading = ref(false)
+const saving = ref(false)
+const previewing = ref(false)
+const row = ref(null)
+const alloc = ref(null)
+const dbIps = ref([])
+const customers = ref([])
+
+const editing = ref(false)
+const yamlPreview = ref('')
+const lastApplyResult = ref(null)
+
+const KIND_SECTION = {
+  ether: 'ethernets',
+  ethernet: 'ethernets',
+  bridge: 'bridges',
+  bond: 'bonds',
+  vlan: 'vlans',
+  gre: 'tunnels',
+  gretap: 'tunnels',
+  vxlan: 'tunnels',
+  ip6gre: 'tunnels',
+  geneve: 'tunnels',
+}
+
+const KIND_LABEL = {
+  ether: '以太网 (ethernet)',
+  ethernet: '以太网 (ethernet)',
+  loopback: '回环 (loopback)',
+  bridge: '桥接 (bridge)',
+  bond: '聚合 (bond)',
+  vlan: 'VLAN',
+  gre: 'GRE 隧道',
+  gretap: 'GRETAP 隧道',
+  vxlan: 'VXLAN 隧道',
+  ip6gre: 'IP6GRE 隧道',
+  wireguard: 'WireGuard',
+  geneve: 'Geneve 隧道',
+}
+
+const form = reactive({
+  addresses: [],
+  mtu: null,
+  dhcp4: false,
+  dhcp6: false,
+  gateway4: '',
+  gateway6: '',
+  nameservers: [],
+  routes: [],
+  interfaces: [],
+  vlan_id: null,
+  vlan_link: '',
+  tunnel_mode: '',
+  tunnel_local: '',
+  tunnel_remote: '',
+  tunnel_key: '',
+  tunnel_ttl: null,
+  tunnel_port: null,
+  tunnel_id: null,
+})
+
+async function load() {
+  const ifname = route.params.ifname
+  if (!ifname) return
+  loading.value = true
+  try {
+    const { data } = await interfaceApi.liveDetail(ifname)
+    row.value = data
+
+    const [allocs, ips, custs] = await Promise.all([
+      resourceApi.listAllocations().catch(() => []),
+      resourceApi.listIps().catch(() => []),
+      resourceApi.listCustomers().catch(() => []),
+    ])
+    customers.value = custs || []
+    alloc.value = (allocs || []).find((a) => (a.interface_code || '') === ifname) || null
+    dbIps.value = (ips || []).filter((p) => (p.interface_code || '') === ifname)
+
+    syncFormFromNetplan()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+    row.value = null
+  } finally {
+    loading.value = false
+  }
+}
+
+function effectiveTunnelSpec() {
+  // 对 GRE/VXLAN：隧道意图（DesiredTunnelConfig）优先于 netplan 实采（避免漂移），fallback 用 netplan spec
+  const dt = row.value?.desired_tunnel
+  if (dt && dt.spec && dt.spec.netplan_tunnel && typeof dt.spec.netplan_tunnel === 'object') {
+    return { ...dt.spec.netplan_tunnel }
+  }
+  return null
+}
+
+function syncFormFromNetplan() {
+  const np = row.value?.netplan || null
+  const spec = np?.spec || {}
+  const tunSpec = effectiveTunnelSpec()
+  const eff = tunSpec ? { ...spec, ...tunSpec } : spec
+
+  form.addresses = Array.isArray(eff.addresses) ? [...eff.addresses] : []
+  form.mtu = eff.mtu ?? row.value?.mtu ?? null
+  form.dhcp4 = Boolean(eff.dhcp4)
+  form.dhcp6 = Boolean(eff.dhcp6)
+  form.gateway4 = eff.gateway4 || ''
+  form.gateway6 = eff.gateway6 || ''
+  form.nameservers = Array.isArray(eff?.nameservers?.addresses)
+    ? [...eff.nameservers.addresses]
+    : []
+  form.routes = Array.isArray(eff.routes)
+    ? eff.routes.map((r) => ({
+        to: r.to || '',
+        via: r.via || '',
+        metric: r.metric ?? null,
+        table: r.table ?? null,
+      }))
+    : []
+  form.interfaces = Array.isArray(eff.interfaces) ? [...eff.interfaces] : []
+  form.vlan_id = eff.id ?? null
+  form.vlan_link = eff.link || ''
+  form.tunnel_mode = eff.mode || row.value?.netplan_tunnel_mode || ''
+  form.tunnel_local = eff.local || ''
+  form.tunnel_remote = eff.remote || ''
+  form.tunnel_key = eff.key ?? ''
+  form.tunnel_ttl = eff.ttl ?? null
+  form.tunnel_port = eff.port ?? null
+  form.tunnel_id = eff.id ?? null
+}
+
+const customerName = computed(() => {
+  const code = alloc.value?.customer_code
+  if (!code) return null
+  const c = customers.value.find((x) => x.code === code)
+  return c ? c.name || c.code : code
+})
+
+const sectionLabel = computed(() => {
+  const k = (row.value?.kind || '').toLowerCase()
+  return KIND_LABEL[k] || k || '未知'
+})
+
+const editable = computed(() => Boolean(KIND_SECTION[(row.value?.kind || '').toLowerCase()]))
+
+const isWireguard = computed(() => (row.value?.kind || '').toLowerCase() === 'wireguard')
+const isTunnel = computed(() =>
+  ['gre', 'gretap', 'vxlan', 'ip6gre', 'geneve'].includes((row.value?.kind || '').toLowerCase()),
+)
+const isBridge = computed(() => (row.value?.kind || '').toLowerCase() === 'bridge')
+const isBond = computed(() => (row.value?.kind || '').toLowerCase() === 'bond')
+const isVlan = computed(() => (row.value?.kind || '').toLowerCase() === 'vlan')
+
+const ipv4Addrs = computed(() => {
+  const out = []
+  for (const a of row.value?.addresses || []) {
+    for (const ai of a?.addr_info || []) {
+      if (ai.family === 'inet') out.push(ai)
+    }
+  }
+  return out
+})
+
+const ipv6Addrs = computed(() => {
+  const out = []
+  for (const a of row.value?.addresses || []) {
+    for (const ai of a?.addr_info || []) {
+      if (ai.family === 'inet6') out.push(ai)
+    }
+  }
+  return out
+})
+
+const np = computed(() => row.value?.netplan || null)
+const npSpec = computed(() => np.value?.spec || {})
+const wg = computed(() => row.value?.wireguard || null)
+const tun = computed(() => row.value?.ip_tunnel_show || null)
+const linkinfo = computed(() => row.value?.linkinfo || null)
+const linkinfoData = computed(() => linkinfo.value?.info_data || null)
+const desiredTunnel = computed(() => row.value?.desired_tunnel || null)
+const desiredTunnelSpec = computed(() => desiredTunnel.value?.spec?.netplan_tunnel || null)
+const desiredTunnelPeers = computed(() => {
+  const t = desiredTunnelSpec.value || {}
+  return Array.isArray(t.peers) ? t.peers : []
+})
+const desiredTunnelAddrs = computed(() => {
+  const a = desiredTunnelSpec.value?.addresses
+  if (Array.isArray(a)) return a
+  if (typeof a === 'string' && a) return [a]
+  return []
+})
+const wgConsistency = computed(() => {
+  if (!isWireguard.value) return null
+  const live = wg.value || null
+  const want = desiredTunnelSpec.value || null
+  if (!want) return null
+  const livePub = (live?.public_key || '').trim()
+  const wantPub = (want?.keys?.public || '').trim()
+  const livePort = live?.listen_port
+  const wantPort = want?.listen_port ?? null
+  const livePeerCount = (live?.peers || []).length
+  const wantPeerCount = (want?.peers || []).length
+  const matchPub = !wantPub || !livePub || livePub === wantPub
+  const matchPort = wantPort == null || livePort == null || Number(livePort) === Number(wantPort)
+  const matchPeers = livePeerCount === wantPeerCount
+  const ok = matchPub && matchPort && matchPeers
+  return { ok, matchPub, matchPort, matchPeers, livePeerCount, wantPeerCount, livePub, wantPub, livePort, wantPort }
+})
+
+function buildPayload() {
+  const k = (row.value?.kind || '').toLowerCase()
+  const section = KIND_SECTION[k]
+  const spec = {}
+
+  if (form.mtu) spec.mtu = Number(form.mtu)
+  if (form.dhcp4) spec.dhcp4 = true
+  if (form.dhcp6) spec.dhcp6 = true
+  if (form.addresses?.length) spec.addresses = form.addresses.filter(Boolean)
+  if (form.gateway4) spec.gateway4 = form.gateway4
+  if (form.gateway6) spec.gateway6 = form.gateway6
+  if (form.nameservers?.length) {
+    spec.nameservers = { addresses: form.nameservers.filter(Boolean) }
+  }
+  if (form.routes?.length) {
+    spec.routes = form.routes
+      .filter((r) => r.to)
+      .map((r) => {
+        const o = { to: r.to }
+        if (r.via) o.via = r.via
+        if (r.metric !== null && r.metric !== '') o.metric = Number(r.metric)
+        if (r.table !== null && r.table !== '') o.table = Number(r.table)
+        return o
+      })
+  }
+  if (section === 'bridges' || section === 'bonds') {
+    if (form.interfaces?.length) spec.interfaces = form.interfaces.filter(Boolean)
+  }
+  if (section === 'vlans') {
+    if (form.vlan_id !== null && form.vlan_id !== '') spec.id = Number(form.vlan_id)
+    if (form.vlan_link) spec.link = form.vlan_link
+  }
+  if (section === 'tunnels') {
+    if (form.tunnel_mode) spec.mode = form.tunnel_mode
+    if (form.tunnel_local) spec.local = form.tunnel_local
+    if (form.tunnel_remote) spec.remote = form.tunnel_remote
+    if (form.tunnel_key !== '' && form.tunnel_key !== null) spec.key = form.tunnel_key
+    if (form.tunnel_ttl !== null && form.tunnel_ttl !== '') spec.ttl = Number(form.tunnel_ttl)
+    if (form.tunnel_port !== null && form.tunnel_port !== '') spec.port = Number(form.tunnel_port)
+    if (form.tunnel_id !== null && form.tunnel_id !== '') spec.id = Number(form.tunnel_id)
+  }
+  return { kind: row.value?.kind, spec }
+}
+
+async function doPreview() {
+  previewing.value = true
+  yamlPreview.value = ''
+  try {
+    const payload = buildPayload()
+    const { data } = await interfaceApi.previewInterfaceConfig(route.params.ifname, payload)
+    if (data?.ok) {
+      yamlPreview.value = data.yaml || ''
+      ElMessage.success('已生成预览')
+    } else {
+      ElMessage.error(data?.error || '预览失败')
+    }
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.error || e?.response?.data?.detail || e.message || '预览失败')
+  } finally {
+    previewing.value = false
+  }
+}
+
+async function doApply() {
+  try {
+    await ElMessageBox.confirm(
+      `即将把「${route.params.ifname}」的接口配置写入 netplan 并通过 netplan try 下发到系统，成功后将自动同步回写数据库。继续？`,
+      '同步配置到系统',
+      { type: 'warning', confirmButtonText: '执行下发', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  saving.value = true
+  lastApplyResult.value = null
+  try {
+    const payload = buildPayload()
+    const { data } = await interfaceApi.applyInterfaceConfig(route.params.ifname, payload)
+    lastApplyResult.value = data
+    if (data?.ok) {
+      ElMessage.success('下发成功，已写入文件并同步数据库')
+      editing.value = false
+      await load()
+    } else {
+      ElMessage.error(data?.error || '下发失败，请查看详细步骤')
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    lastApplyResult.value = d
+    ElMessage.error(d?.error || d?.detail || e.message || '下发失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+function goEditTunnel() {
+  router.push({ name: 'iface-tunnel-config' })
+}
+
+const applyingWg = ref(false)
+async function applyDesiredTunnelsForWg() {
+  if (!desiredTunnel.value) {
+    ElMessage.warning('该接口尚未在「隧道接口配置」中录入意图')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将依据数据库中的隧道意图重新下发：WireGuard 写入 /etc/wireguard/${route.params.ifname}.conf，并通过 wg-quick down → wg-quick up 重建接口。继续？`,
+      '同步 WireGuard 配置',
+      { type: 'warning', confirmButtonText: '执行下发', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  applyingWg.value = true
+  lastApplyResult.value = null
+  try {
+    const { data } = await interfaceApi.applyDesiredTunnelsToSystem()
+    lastApplyResult.value = data
+    if (data?.ok) {
+      ElMessage.success('已通过 wg-quick 重建接口，刷新中...')
+      await load()
+    } else {
+      ElMessage.error(data?.error || '下发失败，请查看下方步骤明细')
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    lastApplyResult.value = d
+    ElMessage.error(d?.error || d?.detail || e.message || '下发失败')
+  } finally {
+    applyingWg.value = false
+  }
+}
+
+function copyText(text) {
+  if (!text) return
+  navigator.clipboard
+    .writeText(text)
+    .then(() => ElMessage.success('已复制'))
+    .catch(() => ElMessage.error('复制失败，请手动选择'))
+}
+
+const wgConfPreview = computed(() => {
+  if (!isWireguard.value || !desiredTunnelSpec.value) return ''
+  const t = desiredTunnelSpec.value
+  const ifname = row.value?.ifname || ''
+  const addrs = desiredTunnelAddrs.value
+  const peers = desiredTunnelPeers.value
+  const head = [
+    `# /etc/wireguard/${ifname}.conf  (PE Manager managed)`,
+    '[Interface]',
+    `PrivateKey = ${t?.keys?.private ? '***(masked)***' : '<未配置>'}`,
+    addrs.length ? `Address = ${addrs.join(', ')}` : '',
+    t?.listen_port ? `ListenPort = ${t.listen_port}` : '',
+  ].filter(Boolean)
+  const peerBlocks = peers.map((p, idx) => {
+    const lines = [`# Peer #${idx + 1}`, '[Peer]', `PublicKey = ${p.public_key || '<空>'}`]
+    if (p.endpoint) lines.push(`Endpoint = ${p.endpoint}`)
+    if (Array.isArray(p.allowed_ips) && p.allowed_ips.length) {
+      lines.push(`AllowedIPs = ${p.allowed_ips.join(', ')}`)
+    }
+    if (p.persistent_keepalive) {
+      lines.push(`PersistentKeepalive = ${p.persistent_keepalive}`)
+    }
+    return lines.join('\n')
+  })
+  return [head.join('\n'), '', peerBlocks.join('\n\n')].join('\n')
+})
+
+async function doRemoveManaged() {
+  try {
+    await ElMessageBox.confirm(
+      `将删除 pemanager 为「${route.params.ifname}」托管的 netplan 文件，并通过 netplan try 重新生效系统其他文件中的配置。继续？`,
+      '移除托管配置',
+      { type: 'warning', confirmButtonText: '移除', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  saving.value = true
+  try {
+    const { data } = await interfaceApi.removeInterfaceConfig(route.params.ifname)
+    lastApplyResult.value = data
+    if (data?.ok) {
+      ElMessage.success('已移除并刷新数据库')
+      await load()
+    } else {
+      ElMessage.error(data?.error || '移除失败')
+    }
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.error || e.message || '移除失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+function addAddress() {
+  form.addresses.push('')
+}
+function rmAddress(i) {
+  form.addresses.splice(i, 1)
+}
+function addNs() {
+  form.nameservers.push('')
+}
+function rmNs(i) {
+  form.nameservers.splice(i, 1)
+}
+function addRoute() {
+  form.routes.push({ to: '', via: '', metric: null, table: null })
+}
+function rmRoute(i) {
+  form.routes.splice(i, 1)
+}
+function addMember() {
+  form.interfaces.push('')
+}
+function rmMember(i) {
+  form.interfaces.splice(i, 1)
+}
+
+watch(() => route.params.ifname, () => {
+  editing.value = false
+  yamlPreview.value = ''
+  lastApplyResult.value = null
+  load()
+})
+
+onMounted(load)
+
+function fmtList(v) {
+  if (Array.isArray(v)) return v.join(', ')
+  return v ?? '—'
+}
+</script>
+
+<template>
+  <div class="page" v-loading="loading">
+    <PageHeader :title="`接口详情 · ${route.params.ifname}`" :icon="Connection">
+      <template #actions>
+        <el-button @click="router.push({ name: 'iface-live' })">
+          <el-icon><ArrowLeft /></el-icon>
+          <span>返回</span>
+        </el-button>
+        <el-button :loading="loading" @click="load">
+          <el-icon><Refresh /></el-icon>
+          <span>刷新</span>
+        </el-button>
+      </template>
+    </PageHeader>
+
+    <template v-if="row">
+      <el-card shadow="never" class="sec">
+        <template #header>基本信息</template>
+        <el-descriptions :column="3" border size="small">
+          <el-descriptions-item label="接口名">
+            <code>{{ row.ifname }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item label="索引">{{ row.ifindex ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="类型">
+            <el-tag size="small">{{ sectionLabel }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="管理状态">
+            <el-tag size="small" :type="row.admin_up ? 'success' : 'info'" effect="dark">
+              {{ row.admin_up ? 'UP' : 'DOWN' }}
+            </el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="运行状态">{{ row.operstate || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="MTU">{{ row.mtu ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="MAC">
+            <code v-if="row.mac">{{ row.mac }}</code>
+            <span v-else class="muted">—</span>
+          </el-descriptions-item>
+          <el-descriptions-item label="qdisc">{{ row.qdisc || '—' }}</el-descriptions-item>
+          <el-descriptions-item label="链路类型">{{ row.link_type || '—' }}</el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+
+      <el-card shadow="never" class="sec">
+        <template #header>客户与资源</template>
+        <el-row :gutter="12">
+          <el-col :xs="24" :md="12">
+            <el-descriptions :column="1" border size="small" title="带宽分配">
+              <el-descriptions-item label="客户名称">
+                <template v-if="customerName">
+                  <strong>{{ customerName }}</strong>
+                  <span class="muted" style="margin-left: 6px">（{{ alloc?.customer_code }}）</span>
+                </template>
+                <span v-else class="muted">未分配</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="带宽池">
+                <span v-if="alloc?.pool_name">{{ alloc.pool_name }}</span>
+                <span v-else class="muted">—</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="限速">
+                <strong v-if="alloc" style="color: var(--pe-primary)">{{ alloc.allocated_mbps }} Mbps</strong>
+                <span v-else class="muted">—</span>
+              </el-descriptions-item>
+              <el-descriptions-item label="备注">{{ alloc?.remark || '—' }}</el-descriptions-item>
+            </el-descriptions>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <div class="sub-title">资源库 IP</div>
+            <el-table v-if="dbIps.length" :data="dbIps" size="small" border>
+              <el-table-column prop="address" label="地址" />
+              <el-table-column prop="state" label="状态" width="100">
+                <template #default="{ row: ip }">
+                  <el-tag size="small" :type="ip.state === 'allocated' ? 'success' : ip.state === 'reserved' ? 'warning' : 'info'">
+                    {{ ip.state }}
+                  </el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="customer_code" label="客户" width="120" />
+            </el-table>
+            <div v-else class="empty">资源库未关联该接口的 IP</div>
+          </el-col>
+        </el-row>
+      </el-card>
+
+      <el-card v-if="desiredTunnel" shadow="never" class="sec">
+        <template #header>
+          <div class="cfg-head">
+            <span>隧道意图（DesiredTunnelConfig）</span>
+            <div class="cfg-actions">
+              <el-tag size="small" :type="desiredTunnel.kind === 'wireguard' ? 'success' : desiredTunnel.kind === 'gre' ? 'primary' : 'warning'">
+                {{ desiredTunnel.kind }}
+              </el-tag>
+              <el-button size="small" :icon="Edit" @click="goEditTunnel">编辑意图</el-button>
+              <el-button
+                v-if="isWireguard"
+                type="success"
+                size="small"
+                :loading="applyingWg"
+                :icon="Upload"
+                @click="applyDesiredTunnelsForWg"
+              >
+                同步到系统 (wg-quick)
+              </el-button>
+            </div>
+          </div>
+        </template>
+
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="接口名">
+            <code>{{ desiredTunnel.ifname }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item label="模式 / 类型">
+            <el-tag size="small">{{ desiredTunnelSpec?.mode || desiredTunnel.kind }}</el-tag>
+          </el-descriptions-item>
+          <el-descriptions-item label="本端地址 (addresses)" :span="2">
+            <code v-for="a in desiredTunnelAddrs" :key="a" class="inline">{{ a }}</code>
+            <span v-if="!desiredTunnelAddrs.length" class="muted">—</span>
+          </el-descriptions-item>
+          <template v-if="!isWireguard">
+            <el-descriptions-item label="local">{{ desiredTunnelSpec?.local || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="remote">{{ desiredTunnelSpec?.remote || '—' }}</el-descriptions-item>
+            <el-descriptions-item v-if="desiredTunnelSpec?.id != null" label="VNI / ID">{{ desiredTunnelSpec.id }}</el-descriptions-item>
+            <el-descriptions-item v-if="desiredTunnelSpec?.key != null" label="key">{{ desiredTunnelSpec.key }}</el-descriptions-item>
+            <el-descriptions-item v-if="desiredTunnelSpec?.port" label="port">{{ desiredTunnelSpec.port }}</el-descriptions-item>
+            <el-descriptions-item v-if="desiredTunnelSpec?.ttl != null" label="ttl">{{ desiredTunnelSpec.ttl }}</el-descriptions-item>
+          </template>
+          <template v-else>
+            <el-descriptions-item label="listen-port">{{ desiredTunnelSpec?.listen_port ?? '—' }}</el-descriptions-item>
+            <el-descriptions-item label="本端公钥">
+              <code class="mono-wrap">{{ desiredTunnelSpec?.keys?.public || '—' }}</code>
+            </el-descriptions-item>
+            <el-descriptions-item label="本端私钥">
+              <code class="mono-wrap">{{ desiredTunnelSpec?.keys?.private ? '***(已配置，下发到 conf 后由 wg-quick 应用)***' : '—' }}</code>
+            </el-descriptions-item>
+            <el-descriptions-item label="备注" :span="2">
+              <span v-if="desiredTunnel.remark">{{ desiredTunnel.remark }}</span>
+              <span v-else class="muted">—</span>
+            </el-descriptions-item>
+          </template>
+          <el-descriptions-item v-if="!isWireguard" label="备注" :span="2">
+            <span v-if="desiredTunnel.remark">{{ desiredTunnel.remark }}</span>
+            <span v-else class="muted">—</span>
+          </el-descriptions-item>
+        </el-descriptions>
+
+        <template v-if="isWireguard">
+          <div class="sub-title" style="margin-top: 12px">Peers（意图）</div>
+          <el-table v-if="desiredTunnelPeers.length" :data="desiredTunnelPeers" size="small" border>
+            <el-table-column label="public key" min-width="240">
+              <template #default="{ row: p }">
+                <code class="mono-wrap">{{ p.public_key || '—' }}</code>
+              </template>
+            </el-table-column>
+            <el-table-column prop="endpoint" label="endpoint" width="220" />
+            <el-table-column label="allowed-ips" min-width="200">
+              <template #default="{ row: p }">
+                <code v-for="a in (p.allowed_ips || [])" :key="a" class="inline">{{ a }}</code>
+                <span v-if="!(p.allowed_ips || []).length" class="muted">—</span>
+              </template>
+            </el-table-column>
+            <el-table-column prop="persistent_keepalive" label="keepalive" width="100" />
+          </el-table>
+          <div v-else class="empty">未配置 peer</div>
+
+          <div v-if="wgConsistency" class="consistency-box">
+            <el-alert
+              v-if="wgConsistency.ok"
+              type="success"
+              :closable="false"
+              show-icon
+              title="系统 wg show 与隧道意图一致"
+            />
+            <el-alert v-else type="warning" :closable="false" show-icon title="系统 wg show 与隧道意图存在差异">
+              <template #default>
+                <ul class="diff-list">
+                  <li v-if="!wgConsistency.matchPub">公钥：live = <code>{{ wgConsistency.livePub || '—' }}</code>；意图 = <code>{{ wgConsistency.wantPub || '—' }}</code></li>
+                  <li v-if="!wgConsistency.matchPort">listen-port：live = {{ wgConsistency.livePort ?? '—' }}；意图 = {{ wgConsistency.wantPort ?? '—' }}</li>
+                  <li v-if="!wgConsistency.matchPeers">peer 数量：live = {{ wgConsistency.livePeerCount }}；意图 = {{ wgConsistency.wantPeerCount }}</li>
+                </ul>
+                <div style="margin-top: 4px">点上方「同步到系统 (wg-quick)」即可重建接口。</div>
+              </template>
+            </el-alert>
+          </div>
+
+          <div v-if="wgConfPreview" class="yaml-preview" style="margin-top: 12px">
+            <div class="sub-title">
+              wg-quick 配置预览 (将写入 <code>/etc/wireguard/{{ row.ifname }}.conf</code>)
+              <el-button link size="small" :icon="CopyDocument" style="margin-left: 6px" @click="copyText(wgConfPreview)">复制</el-button>
+            </div>
+            <pre>{{ wgConfPreview }}</pre>
+          </div>
+        </template>
+      </el-card>
+
+      <el-card shadow="never" class="sec">
+        <template #header>地址列表（来自内核）</template>
+        <el-row :gutter="12">
+          <el-col :xs="24" :md="12">
+            <div class="sub-title">IPv4</div>
+            <el-table v-if="ipv4Addrs.length" :data="ipv4Addrs" size="small" border>
+              <el-table-column label="地址">
+                <template #default="{ row: ai }">
+                  <code>{{ ai.local }}/{{ ai.prefixlen }}</code>
+                </template>
+              </el-table-column>
+              <el-table-column prop="scope" label="scope" width="100" />
+              <el-table-column prop="dynamic" label="动态" width="80">
+                <template #default="{ row: ai }">{{ ai.dynamic ? '是' : '否' }}</template>
+              </el-table-column>
+              <el-table-column prop="label" label="标签" width="120" />
+            </el-table>
+            <div v-else class="empty">无 IPv4 地址</div>
+          </el-col>
+          <el-col :xs="24" :md="12">
+            <div class="sub-title">IPv6</div>
+            <el-table v-if="ipv6Addrs.length" :data="ipv6Addrs" size="small" border>
+              <el-table-column label="地址">
+                <template #default="{ row: ai }">
+                  <code>{{ ai.local }}/{{ ai.prefixlen }}</code>
+                </template>
+              </el-table-column>
+              <el-table-column prop="scope" label="scope" width="100" />
+            </el-table>
+            <div v-else class="empty">无 IPv6 地址</div>
+          </el-col>
+        </el-row>
+      </el-card>
+
+      <el-card shadow="never" class="sec">
+        <template #header>
+          <div class="cfg-head">
+            <span>接口配置</span>
+            <div class="cfg-actions">
+              <template v-if="isWireguard">
+                <el-button size="small" :icon="Edit" @click="goEditTunnel">
+                  在「隧道接口配置」中编辑
+                </el-button>
+                <el-button
+                  type="success"
+                  size="small"
+                  :loading="applyingWg"
+                  :disabled="!desiredTunnel"
+                  :icon="Upload"
+                  @click="applyDesiredTunnelsForWg"
+                >
+                  同步到系统 (wg-quick)
+                </el-button>
+              </template>
+              <template v-else-if="!editable">
+                <el-tag type="info" size="small">该类型暂不支持在此编辑</el-tag>
+              </template>
+              <template v-else-if="!editing">
+                <el-button type="primary" size="small" @click="editing = true">
+                  <el-icon><Edit /></el-icon>
+                  <span>编辑</span>
+                </el-button>
+                <el-button size="small" :loading="saving" @click="doRemoveManaged">
+                  <el-icon><Delete /></el-icon>
+                  <span>移除托管</span>
+                </el-button>
+              </template>
+              <template v-else>
+                <el-button size="small" :loading="previewing" @click="doPreview">
+                  <el-icon><View /></el-icon>
+                  <span>预览 YAML</span>
+                </el-button>
+                <el-button type="success" size="small" :loading="saving" @click="doApply">
+                  <el-icon><Upload /></el-icon>
+                  <span>同步配置</span>
+                </el-button>
+                <el-button size="small" @click="editing = false; yamlPreview = ''; syncFormFromNetplan()">
+                  <el-icon><Close /></el-icon>
+                  <span>取消</span>
+                </el-button>
+              </template>
+            </div>
+          </div>
+        </template>
+
+        <!-- 只读视图 -->
+        <template v-if="!editing">
+          <el-descriptions :column="2" border size="small">
+            <el-descriptions-item label="接口类型">{{ sectionLabel }}</el-descriptions-item>
+            <el-descriptions-item label="渲染器">{{ npSpec.renderer || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="MTU">{{ npSpec.mtu ?? row.mtu ?? '—' }}</el-descriptions-item>
+            <el-descriptions-item label="DHCPv4">
+              <el-tag size="small" :type="npSpec.dhcp4 ? 'success' : 'info'">{{ npSpec.dhcp4 ? '启用' : '禁用' }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item label="DHCPv6">
+              <el-tag size="small" :type="npSpec.dhcp6 ? 'success' : 'info'">{{ npSpec.dhcp6 ? '启用' : '禁用' }}</el-tag>
+            </el-descriptions-item>
+            <el-descriptions-item v-if="npSpec['link-local']" label="link-local">
+              {{ fmtList(npSpec['link-local']) }}
+            </el-descriptions-item>
+            <el-descriptions-item label="地址 (addresses)" :span="2">
+              <code v-for="a in npSpec.addresses || []" :key="a" class="inline">{{ a }}</code>
+              <span v-if="!(npSpec.addresses || []).length" class="muted">—</span>
+            </el-descriptions-item>
+            <el-descriptions-item label="网关 (gateway4)">{{ npSpec.gateway4 || '—' }}</el-descriptions-item>
+            <el-descriptions-item label="网关 (gateway6)">{{ npSpec.gateway6 || '—' }}</el-descriptions-item>
+            <el-descriptions-item v-if="npSpec.nameservers" label="DNS" :span="2">
+              <code v-for="d in (npSpec.nameservers?.addresses || [])" :key="d" class="inline">{{ d }}</code>
+            </el-descriptions-item>
+            <template v-if="isVlan">
+              <el-descriptions-item label="VLAN ID">{{ npSpec.id ?? '—' }}</el-descriptions-item>
+              <el-descriptions-item label="父接口 (link)">{{ npSpec.link || '—' }}</el-descriptions-item>
+            </template>
+            <template v-if="isBridge || isBond">
+              <el-descriptions-item label="成员接口" :span="2">
+                <code v-for="i in npSpec.interfaces || []" :key="i" class="inline">{{ i }}</code>
+                <span v-if="!(npSpec.interfaces || []).length" class="muted">—</span>
+              </el-descriptions-item>
+            </template>
+            <template v-if="isTunnel">
+              <el-descriptions-item label="模式 (mode)">{{ npSpec.mode || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="local">{{ npSpec.local || '—' }}</el-descriptions-item>
+              <el-descriptions-item label="remote">{{ npSpec.remote || '—' }}</el-descriptions-item>
+              <el-descriptions-item v-if="npSpec.id != null" label="VNI/ID">{{ npSpec.id }}</el-descriptions-item>
+              <el-descriptions-item v-if="npSpec.key != null" label="key">{{ npSpec.key }}</el-descriptions-item>
+              <el-descriptions-item v-if="npSpec.port" label="port">{{ npSpec.port }}</el-descriptions-item>
+              <el-descriptions-item v-if="npSpec.ttl != null" label="ttl">{{ npSpec.ttl }}</el-descriptions-item>
+            </template>
+          </el-descriptions>
+          <div v-if="npSpec.routes?.length" class="sub-title" style="margin-top: 12px">静态路由（接口内）</div>
+          <el-table v-if="npSpec.routes?.length" :data="npSpec.routes" size="small" border>
+            <el-table-column prop="to" label="目的" />
+            <el-table-column prop="via" label="下一跳" />
+            <el-table-column prop="metric" label="metric" width="100" />
+            <el-table-column prop="table" label="table" width="100" />
+          </el-table>
+        </template>
+
+        <!-- 编辑视图 -->
+        <template v-else>
+          <el-form label-width="120px" size="small" class="cfg-form">
+            <el-form-item label="接口类型">
+              <el-tag size="small">{{ sectionLabel }}</el-tag>
+              <span class="muted hint">类型由内核确定，不可在此修改</span>
+            </el-form-item>
+
+            <template v-if="isVlan">
+              <el-form-item label="VLAN ID">
+                <el-input-number v-model="form.vlan_id" :min="1" :max="4094" />
+              </el-form-item>
+              <el-form-item label="父接口 (link)">
+                <el-input v-model="form.vlan_link" placeholder="例如 eth0" />
+              </el-form-item>
+            </template>
+
+            <template v-if="isBridge || isBond">
+              <el-form-item label="成员接口">
+                <div class="list-edit">
+                  <div v-for="(_, i) in form.interfaces" :key="i" class="list-row">
+                    <el-input v-model="form.interfaces[i]" placeholder="接口名" style="width: 240px" />
+                    <el-button link type="danger" @click="rmMember(i)"><el-icon><Delete /></el-icon></el-button>
+                  </div>
+                  <el-button link type="primary" @click="addMember"><el-icon><Plus /></el-icon> 添加成员</el-button>
+                </div>
+              </el-form-item>
+            </template>
+
+            <template v-if="isTunnel">
+              <el-form-item label="隧道模式">
+                <el-select v-model="form.tunnel_mode" placeholder="mode" style="width: 200px">
+                  <el-option label="gre" value="gre" />
+                  <el-option label="gretap" value="gretap" />
+                  <el-option label="vxlan" value="vxlan" />
+                  <el-option label="ip6gre" value="ip6gre" />
+                </el-select>
+              </el-form-item>
+              <el-form-item label="本端 local">
+                <el-input v-model="form.tunnel_local" placeholder="例如 1.2.3.4" />
+              </el-form-item>
+              <el-form-item label="对端 remote">
+                <el-input v-model="form.tunnel_remote" placeholder="例如 5.6.7.8" />
+              </el-form-item>
+              <el-form-item label="VNI / ID">
+                <el-input-number v-model="form.tunnel_id" :min="0" :max="16777215" />
+              </el-form-item>
+              <el-form-item label="key">
+                <el-input v-model="form.tunnel_key" placeholder="可选 (GRE)" />
+              </el-form-item>
+              <el-form-item label="port">
+                <el-input-number v-model="form.tunnel_port" :min="1" :max="65535" />
+              </el-form-item>
+              <el-form-item label="ttl">
+                <el-input-number v-model="form.tunnel_ttl" :min="1" :max="255" />
+              </el-form-item>
+            </template>
+
+            <el-form-item label="本端地址">
+              <div class="list-edit">
+                <div v-for="(_, i) in form.addresses" :key="i" class="list-row">
+                  <el-input v-model="form.addresses[i]" placeholder="例如 10.0.0.1/24" style="width: 280px" />
+                  <el-button link type="danger" @click="rmAddress(i)"><el-icon><Delete /></el-icon></el-button>
+                </div>
+                <el-button link type="primary" @click="addAddress"><el-icon><Plus /></el-icon> 添加地址</el-button>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="MTU">
+              <el-input-number v-model="form.mtu" :min="68" :max="65535" />
+            </el-form-item>
+
+            <el-form-item label="DHCP">
+              <el-checkbox v-model="form.dhcp4">DHCPv4</el-checkbox>
+              <el-checkbox v-model="form.dhcp6" style="margin-left: 12px">DHCPv6</el-checkbox>
+            </el-form-item>
+
+            <el-form-item label="网关 (gateway4)">
+              <el-input v-model="form.gateway4" placeholder="可选" style="width: 240px" />
+            </el-form-item>
+            <el-form-item label="网关 (gateway6)">
+              <el-input v-model="form.gateway6" placeholder="可选" style="width: 240px" />
+            </el-form-item>
+
+            <el-form-item label="DNS">
+              <div class="list-edit">
+                <div v-for="(_, i) in form.nameservers" :key="i" class="list-row">
+                  <el-input v-model="form.nameservers[i]" placeholder="DNS 地址" style="width: 240px" />
+                  <el-button link type="danger" @click="rmNs(i)"><el-icon><Delete /></el-icon></el-button>
+                </div>
+                <el-button link type="primary" @click="addNs"><el-icon><Plus /></el-icon> 添加 DNS</el-button>
+              </div>
+            </el-form-item>
+
+            <el-form-item label="静态路由">
+              <div class="list-edit">
+                <div v-for="(_, i) in form.routes" :key="i" class="list-row route-row">
+                  <el-input v-model="form.routes[i].to" placeholder="目的 (CIDR)" style="width: 200px" />
+                  <el-input v-model="form.routes[i].via" placeholder="下一跳" style="width: 180px" />
+                  <el-input-number v-model="form.routes[i].metric" placeholder="metric" :min="0" />
+                  <el-input-number v-model="form.routes[i].table" placeholder="table" :min="0" />
+                  <el-button link type="danger" @click="rmRoute(i)"><el-icon><Delete /></el-icon></el-button>
+                </div>
+                <el-button link type="primary" @click="addRoute"><el-icon><Plus /></el-icon> 添加路由</el-button>
+              </div>
+            </el-form-item>
+          </el-form>
+
+          <div v-if="yamlPreview" class="yaml-preview">
+            <div class="sub-title">YAML 预览（将写入 <code>/etc/netplan/90-pemanager-iface-{{ row.ifname }}.yaml</code>）</div>
+            <pre>{{ yamlPreview }}</pre>
+          </div>
+        </template>
+
+        <div v-if="lastApplyResult" class="apply-result">
+          <div class="sub-title">下发结果</div>
+          <el-alert
+            :type="lastApplyResult.ok ? 'success' : 'error'"
+            :title="lastApplyResult.ok ? '下发成功' : (lastApplyResult.error || '下发失败')"
+            :closable="false"
+            show-icon
+          />
+          <el-collapse v-if="lastApplyResult.steps?.length" style="margin-top: 8px">
+            <el-collapse-item title="执行步骤明细" name="1">
+              <el-table :data="lastApplyResult.steps" size="small" border>
+                <el-table-column prop="step" label="步骤" />
+                <el-table-column label="结果" width="100">
+                  <template #default="{ row: s }">
+                    <el-tag size="small" :type="s.ok ? 'success' : 'danger'">{{ s.ok ? 'OK' : 'FAIL' }}</el-tag>
+                  </template>
+                </el-table-column>
+                <el-table-column prop="returncode" label="rc" width="60" />
+                <el-table-column label="stderr / stdout" show-overflow-tooltip>
+                  <template #default="{ row: s }">
+                    <code class="mono-wrap">{{ s.stderr || s.stdout || s.note || '' }}</code>
+                  </template>
+                </el-table-column>
+              </el-table>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+      </el-card>
+
+      <el-card v-if="wg" shadow="never" class="sec">
+        <template #header>WireGuard 详情</template>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="public key">
+            <code class="mono-wrap">{{ wg.public_key || '—' }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item label="private key">
+            <code class="mono-wrap">{{ wg.private_key || '— (masked)' }}</code>
+          </el-descriptions-item>
+          <el-descriptions-item label="listen-port">{{ wg.listen_port ?? '—' }}</el-descriptions-item>
+          <el-descriptions-item label="fwmark">{{ wg.fwmark ?? '—' }}</el-descriptions-item>
+        </el-descriptions>
+        <div v-if="wg.peers?.length" class="sub-title" style="margin-top: 12px">Peers</div>
+        <el-table v-if="wg.peers?.length" :data="wg.peers" size="small" border>
+          <el-table-column label="public key" min-width="240">
+            <template #default="{ row: p }">
+              <code class="mono-wrap">{{ p.public_key }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column prop="endpoint" label="endpoint" width="180" />
+          <el-table-column label="allowed-ips" min-width="160">
+            <template #default="{ row: p }">
+              <code class="inline" v-for="a in p.allowed_ips || []" :key="a">{{ a }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column prop="latest_handshake_seconds_ago" label="最近握手(s)" width="120" />
+          <el-table-column prop="transfer_rx_bytes" label="RX(B)" width="120" />
+          <el-table-column prop="transfer_tx_bytes" label="TX(B)" width="120" />
+        </el-table>
+      </el-card>
+
+      <el-card v-if="tun" shadow="never" class="sec">
+        <template #header>隧道信息（ip tunnel show）</template>
+        <el-descriptions :column="2" border size="small">
+          <el-descriptions-item label="模式">{{ tun.mode }}</el-descriptions-item>
+          <el-descriptions-item label="详情">{{ tun.details }}</el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+
+      <el-card v-if="linkinfoData" shadow="never" class="sec">
+        <template #header>linkinfo · info_data（内核扩展属性）</template>
+        <el-descriptions :column="3" border size="small">
+          <el-descriptions-item
+            v-for="(v, k) in linkinfoData"
+            :key="k"
+            :label="String(k)"
+          >
+            <span v-if="typeof v === 'object'" class="muted">{{ JSON.stringify(v) }}</span>
+            <span v-else>{{ v }}</span>
+          </el-descriptions-item>
+        </el-descriptions>
+      </el-card>
+    </template>
+    <el-empty v-else-if="!loading" description="无数据" />
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.sec :deep(.el-card__body) { padding: 14px; }
+.sub-title {
+  font-size: 12px;
+  color: var(--pe-text-mute);
+  margin-bottom: 6px;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+.empty {
+  padding: 14px;
+  text-align: center;
+  color: var(--pe-text-mute);
+  font-size: 12px;
+  background: var(--pe-bg);
+  border-radius: var(--pe-radius);
+  border: 1px dashed var(--pe-border);
+}
+.inline {
+  display: inline-block;
+  margin: 0 4px 4px 0;
+}
+.muted { color: var(--pe-text-mute); }
+.mono-wrap {
+  font-family: var(--pe-mono);
+  font-size: 11px;
+  word-break: break-all;
+}
+.cfg-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+}
+.cfg-actions {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+.cfg-form { max-width: 760px; }
+.list-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.list-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.route-row :deep(.el-input-number) { width: 110px; }
+.hint { margin-left: 8px; font-size: 11px; }
+.yaml-preview {
+  margin-top: 12px;
+  border: 1px solid var(--pe-border);
+  border-radius: var(--pe-radius);
+  background: #0f172a;
+}
+.yaml-preview pre {
+  margin: 0;
+  padding: 10px 14px;
+  color: #e2e8f0;
+  font-family: var(--pe-mono);
+  font-size: 12px;
+  line-height: 1.5;
+  overflow-x: auto;
+}
+.apply-result { margin-top: 12px; }
+.consistency-box { margin-top: 12px; }
+.diff-list {
+  margin: 4px 0 0;
+  padding-left: 16px;
+  font-size: 12px;
+  line-height: 1.6;
+}
+</style>

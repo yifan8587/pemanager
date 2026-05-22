@@ -9,5 +9,6 @@ router.register('rules', views.QoSRuleViewSet, basename='qos-rule')
 
 urlpatterns = [
     path('health/', views.health, name='health'),
+    path('summary/', views.QoSSummaryAPIView.as_view(), name='qos-summary'),
     path('', include(router.urls)),
 ]

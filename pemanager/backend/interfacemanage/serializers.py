@@ -6,6 +6,7 @@ from interfacemanage.models import (
     NetworkInterfaceRecord,
     NetworkSyncRun,
 )
+from resourcemanage.models import ResourceCustomer
 
 
 class NetworkSyncRunSerializer(serializers.ModelSerializer):
@@ -82,6 +83,16 @@ class NetworkInterfaceRecordSerializer(serializers.ModelSerializer):
 
 
 class DesiredTunnelConfigSerializer(serializers.ModelSerializer):
+    # customer 用 slug=code，便于前端直接传客户编码；同时只读返回客户名
+    customer = serializers.SlugRelatedField(
+        slug_field='code',
+        queryset=ResourceCustomer.objects.all(),
+        required=False,
+        allow_null=True,
+    )
+    customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
+    customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
+
     class Meta:
         model = DesiredTunnelConfig
         fields = [
@@ -89,8 +100,11 @@ class DesiredTunnelConfigSerializer(serializers.ModelSerializer):
             'kind',
             'ifname',
             'spec',
+            'customer',
+            'customer_code',
+            'customer_name',
             'remark',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'created_at', 'updated_at', 'customer_code', 'customer_name']

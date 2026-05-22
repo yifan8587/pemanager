@@ -1,0 +1,185 @@
+import csv
+from datetime import timedelta
+
+from django.http import StreamingHttpResponse
+from django.utils import timezone
+from rest_framework import filters, viewsets
+from rest_framework.decorators import action, api_view
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from logmanage.models import AppOperationLog
+from logmanage.serializers import AppOperationLogSerializer
+from logmanage.services import journal
+
+APP_NAME = 'logmanage'
+
+
+@api_view(['GET'])
+def health(_request):
+    return Response({'app': APP_NAME, 'status': 'ok'})
+
+
+def _filter_logs_qs(qs, params):
+    for f in ('app', 'category', 'level', 'actor'):
+        v = params.get(f)
+        if v:
+            qs = qs.filter(**{f: v})
+    if params.get('target'):
+        qs = qs.filter(target__icontains=params['target'])
+    if params.get('method'):
+        # 通过 summary 前缀过滤（中间件写入格式：'METHOD /api/... -> 200'）
+        m = params['method'].upper()
+        qs = qs.filter(summary__startswith=f'{m} ')
+    if params.get('search'):
+        from django.db.models import Q
+
+        s = params['search']
+        qs = qs.filter(
+            Q(summary__icontains=s)
+            | Q(actor__icontains=s)
+            | Q(target__icontains=s)
+            | Q(category__icontains=s)
+        )
+    if params.get('since'):
+        qs = qs.filter(created_at__gte=params['since'])
+    if params.get('until'):
+        qs = qs.filter(created_at__lt=params['until'])
+    return qs
+
+
+class AppOperationLogViewSet(viewsets.ReadOnlyModelViewSet):
+    """应用操作日志：只读 + 多维过滤 + meta / stats / CSV 导出。"""
+
+    queryset = AppOperationLog.objects.all()
+    serializer_class = AppOperationLogSerializer
+    filter_backends = [filters.OrderingFilter]
+    ordering_fields = ['created_at', 'level', 'app']
+    ordering = ['-created_at']
+
+    def get_queryset(self):
+        return _filter_logs_qs(super().get_queryset(), self.request.query_params)
+
+    @action(detail=False, methods=['get'], url_path='meta')
+    def meta(self, _request):
+        """返回 app / category / level / actor 的可选枚举，供前端构造下拉。"""
+        apps = list(
+            AppOperationLog.objects.values_list('app', flat=True).distinct().order_by('app')
+        )
+        cats = list(
+            AppOperationLog.objects.values_list('category', flat=True).distinct().order_by('category')
+        )
+        actors = list(
+            AppOperationLog.objects.values_list('actor', flat=True)
+            .distinct()
+            .order_by('actor')[:200]
+        )
+        return Response({
+            'apps': [a for a in apps if a],
+            'categories': [c for c in cats if c],
+            'actors': [a for a in actors if a],
+            'levels': [v for v, _ in AppOperationLog.Level.choices],
+        })
+
+    @action(detail=False, methods=['get'], url_path='stats')
+    def stats(self, request):
+        """汇总统计：最近 N 小时 / 按 level / 按 app / 总数。
+
+        ?hours=24 默认；前端 KPI 卡用。
+        """
+        try:
+            hours = max(1, int(request.query_params.get('hours') or 24))
+        except ValueError:
+            hours = 24
+        since = timezone.now() - timedelta(hours=hours)
+        recent = AppOperationLog.objects.filter(created_at__gte=since)
+        total = AppOperationLog.objects.count()
+        recent_total = recent.count()
+        by_level = {lv: 0 for lv, _ in AppOperationLog.Level.choices}
+        for row in recent.values('level').order_by():
+            by_level[row['level']] = by_level.get(row['level'], 0) + 1
+        by_app: dict[str, int] = {}
+        from django.db.models import Count
+
+        for row in (
+            recent.values('app').annotate(c=Count('id')).order_by('-c')[:10]
+        ):
+            by_app[row['app'] or 'unknown'] = row['c']
+        return Response({
+            'window_hours': hours,
+            'window_since': since,
+            'total_all': total,
+            'total_window': recent_total,
+            'by_level_window': by_level,
+            'top_apps_window': by_app,
+        })
+
+    @action(detail=False, methods=['get'], url_path='export-csv')
+    def export_csv(self, request):
+        """导出 CSV：按当前过滤条件流式输出（避免一次性占大内存）。"""
+        qs = _filter_logs_qs(self.queryset, request.query_params)
+        try:
+            limit = min(int(request.query_params.get('limit') or 10000), 100000)
+        except ValueError:
+            limit = 10000
+        qs = qs.order_by('-created_at')[:limit]
+
+        def _iter():
+            buf = _Echo()
+            writer = csv.writer(buf)
+            yield '\ufeff'  # BOM 让 Excel 识别 UTF-8
+            yield writer.writerow([
+                'created_at_+08', 'app', 'category', 'level', 'actor',
+                'summary', 'target', 'correlation_id', 'detail_json',
+            ])
+            import json as _json
+
+            for r in qs.iterator():
+                local = timezone.localtime(r.created_at)
+                yield writer.writerow([
+                    local.strftime('%Y-%m-%d %H:%M:%S'),
+                    r.app, r.category, r.level, r.actor,
+                    r.summary, r.target,
+                    str(r.correlation_id or ''),
+                    _json.dumps(r.detail or {}, ensure_ascii=False),
+                ])
+
+        ts = timezone.localtime().strftime('%Y%m%d-%H%M%S')
+        resp = StreamingHttpResponse(_iter(), content_type='text/csv; charset=utf-8')
+        resp['Content-Disposition'] = f'attachment; filename="pemanager-oplogs-{ts}.csv"'
+        return resp
+
+
+class _Echo:
+    """csv.writer 要求 .write()；这里实现一个把行返回出去的"伪文件对象"。"""
+
+    def write(self, value):
+        return value
+
+
+class JournalQueryView(APIView):
+    """GET: journalctl 包装查询。"""
+
+    def get(self, request):
+        p = request.query_params
+        try:
+            lines = int(p.get('lines') or 200)
+        except ValueError:
+            lines = 200
+        return Response(
+            journal.query(
+                unit=p.get('unit'),
+                since=p.get('since'),
+                until=p.get('until'),
+                grep=p.get('grep'),
+                priority=p.get('priority'),
+                lines=lines,
+            )
+        )
+
+
+class JournalUnitsView(APIView):
+    """GET: 列举可选的 systemd 单元（service）。"""
+
+    def get(self, request):
+        return Response(journal.list_units(pattern=request.query_params.get('pattern')))

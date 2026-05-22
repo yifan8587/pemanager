@@ -31,6 +31,7 @@ class IPAddressEntry(models.Model):
         AVAILABLE = 'available', '可用'
         RESERVED = 'reserved', '预留'
         ALLOCATED = 'allocated', '已分配'
+        RECYCLED = 'recycled', '回收（不可分配）'
 
     address = models.GenericIPAddressField('IP 地址', unique=True, db_index=True)
     state = models.CharField(
@@ -75,9 +76,9 @@ class IPAddressEntry(models.Model):
 
     def clean(self):
         super().clean()
-        if self.state == self.State.AVAILABLE:
+        if self.state in (self.State.AVAILABLE, self.State.RECYCLED):
             if self.customer_id or self.interface_code:
-                raise ValidationError('状态为「可用」时不能绑定客户或接口')
+                raise ValidationError(f'状态为「{self.get_state_display()}」时不能绑定客户或接口')
         if self.state == self.State.ALLOCATED and not self.customer_id:
             raise ValidationError('「已分配」状态必须指定客户')
 

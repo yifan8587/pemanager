@@ -17,6 +17,5 @@ router.register('allocation-logs', views.ResourceAllocationLogViewSet, basename=
 urlpatterns = [
     path('health/', views.health, name='health'),
     path('summary/', views.ResourceSummaryAPIView.as_view(), name='resource-summary'),
-    path('sync/inbound/', views.InboundSyncAPIView.as_view(), name='resource-sync-inbound'),
     path('', include(router.urls)),
 ]

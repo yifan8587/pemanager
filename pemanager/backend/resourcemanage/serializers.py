@@ -18,6 +18,7 @@ class ResourceCustomerSerializer(serializers.ModelSerializer):
 
 class IPAddressEntrySerializer(serializers.ModelSerializer):
     customer_code = serializers.CharField(source='customer.code', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
 
     class Meta:
         model = IPAddressEntry
@@ -28,6 +29,7 @@ class IPAddressEntrySerializer(serializers.ModelSerializer):
             'subnet_label',
             'customer',
             'customer_code',
+            'customer_name',
             'interface_code',
             'extra',
             'created_at',
@@ -64,6 +66,7 @@ class BandwidthPoolSerializer(serializers.ModelSerializer):
 class BandwidthAllocationSerializer(serializers.ModelSerializer):
     pool_name = serializers.CharField(source='pool.name', read_only=True)
     customer_code = serializers.CharField(source='customer.code', read_only=True)
+    customer_name = serializers.CharField(source='customer.name', read_only=True)
 
     class Meta:
         model = BandwidthAllocation
@@ -73,6 +76,7 @@ class BandwidthAllocationSerializer(serializers.ModelSerializer):
             'pool_name',
             'customer',
             'customer_code',
+            'customer_name',
             'interface_code',
             'allocated_mbps',
             'remark',
@@ -119,6 +123,34 @@ class IPReleaseSerializer(serializers.Serializer):
     actor = serializers.CharField(required=False, default='api')
 
 
+class IPRecycleSerializer(serializers.Serializer):
+    address = serializers.IPAddressField()
+    reason = serializers.CharField(required=False, allow_blank=True, default='')
+    actor = serializers.CharField(required=False, default='api')
+
+
+class IPRestoreSerializer(serializers.Serializer):
+    address = serializers.IPAddressField()
+    actor = serializers.CharField(required=False, default='api')
+
+
+class _RouteIntentSerializer(serializers.Serializer):
+    """allocate-with-route 时附带的路由意图（全部可选；缺 dest_cidr 时不创建路由）。"""
+
+    dest_cidr = serializers.CharField(required=False, allow_blank=True, default='')
+    gateway = serializers.IPAddressField(required=False, allow_null=True, allow_blank=False)
+    on_link = serializers.BooleanField(required=False, default=False)
+    metric = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    route_table = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    netplan_device_class = serializers.CharField(required=False, allow_blank=True)
+    interface_name = serializers.CharField(required=False, allow_blank=True)
+    remark = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class IPAllocateWithRouteSerializer(IPAllocateSerializer):
+    route = _RouteIntentSerializer(required=False)
+
+
 class BandwidthUpsertSerializer(serializers.Serializer):
     pool_name = serializers.CharField()
     interface_code = serializers.CharField()
@@ -134,15 +166,3 @@ class BandwidthDeleteSerializer(serializers.Serializer):
     actor = serializers.CharField(required=False, default='api')
 
 
-class InboundSyncSerializer(serializers.Serializer):
-    source_app = serializers.CharField()
-    actor = serializers.CharField(required=False, default='sync')
-    ip_updates = serializers.ListField(
-        child=serializers.DictField(), required=False, default=list
-    )
-    bandwidth_updates = serializers.ListField(
-        child=serializers.DictField(), required=False, default=list
-    )
-    bandwidth_removals = serializers.ListField(
-        child=serializers.DictField(), required=False, default=list
-    )

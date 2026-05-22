@@ -138,3 +138,115 @@ npm run server
 npm run dev
 source pemanager/venv/bin/activate
 python pemanager/backend/manage.py runserver 0.0.0.0:8000
+git status
+git commit -a
+git add .
+git commit -a
+git status
+cd pemanager/backend/
+source ../venv/bin/activate
+python manage.py runserver 0.0.0.0:8000
+cd pemanager/frontend/
+npm run dev
+wg show
+cat /etc/wireguard/wg0.conf 
+cat /etc/wireguard/wg1.conf 
+cat /etc/wireguard/wg.conf 
+wg-quick down wg0
+wg-quick down wg01
+ip add
+ip link set wg01 down
+ip add
+cd /etc/netplan/99-pemanager-
+cd /etc/netplan/99-pemanager-wireguard.yaml 
+cat /etc/netplan/99-pemanager-wireguard.yaml 
+netplan try apply
+ip add
+wg show
+cat /etc/netplan/50-cloud-init.yaml 
+cat /etc/netplan/99-pemanager-tunnels.yaml 
+reboot
+/etc/init.d/bt 
+/etc/init.d/bt default
+locale
+LANG=zh_CN.UTF-8
+/etc/init.d/bt 
+local
+locale
+apt install iperf3
+iperf3 -c 185.113.140.88
+iperf3 -c 185.113.140.88 -R -p 10
+iperf3 -c 185.113.140.88 -R
+iperf3 -c 185.113.140.88 -p 10
+iperf3 -c -u 185.113.140.88 
+iperf3
+iperf3 --help
+iperf3 -c 185.113.140.88 -R
+iperf3 -c 185.113.140.88
+ip add
+ping 10.0.20.1
+ip route list
+cd pemanager/frontend/
+npm run dev
+cd pemanager/
+source venv/bin/activate
+python backend/manage.py runserver 0.0.0.0:8000
+cd pemanager/frontend/
+npm run dev
+source pemanager/venv/bin/activate
+python pemanager/backend/manage.py runserver 0.0.0.0:8000
+ip add
+iproute2
+ip route 
+cd pemanager/backend/
+cd ..
+source venv/bin/activate
+python backend/manage.py runserver 0.0.0.0:8000
+cd pemanager/frontend/
+npm run dev
+ip route list
+ip rotue list
+ip route list
+wg show
+cat /etc/wireguard/wg0.conf 
+cd /etc/netplan/
+ls
+cat 99-pemanager-
+cat 99-pemanager-wireguard.yaml 
+cat 99-pemanager-tunnels.yaml 
+cat 99-pemanager-routes.yaml 
+wg show
+ip tunnel show
+ip add
+wg show
+ip route list
+source pemanager/venv/bin/activate
+cd pemanager/backend/
+python manage.py runserver 0.0.0.0:8000
+cd pemanager/frontend/
+npm run dev
+tc qdisc show
+tc -s qdisc show dev tun_sino
+tc qdisc show
+tc class show
+tc class 
+source pemanager/venv/bin/activate
+python pemanager/backend/manage.py runserver 0.0.0.0:8000
+cd pemanager/frontend/
+npm run dev
+date
+ip route list
+wg show
+ip route list
+git status
+history | grep git
+git commit -m "pemanagerV1.0" 
+history | grep git
+git push origin main
+ip tunnel show
+ping 8.8.8.8
+tcpdump -i ens18 -n | grep 8.8.8.8
+source pemanager/venv/bin/activate
+python pemanager/backend/manage.py runserver 0.0.0.0:8000
+cd pemanager/frontend/
+npm run dev

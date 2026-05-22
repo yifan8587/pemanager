@@ -1,3 +1,0 @@
-2026-05-16 14:53:37.014 [info] Constructor: scheduling initial write
-2026-05-16 14:53:37.230 [info] fetchAndWrite: lease returned 26 tools across 1 clients
-2026-05-16 14:53:38.462 [info] Incremental write: 1 changed, 0 removed, 0 unchanged {"changedServerCount":1,"changedServers":[{"serverIdentifier":"cursor-ide-browser","sanitizedId":"cursor-ide-browser","toolCount":26}],"removedServerCount":0,"removedServerSanitizedIds":[],"unchangedServerCount":0,"totalServerCount":1,"mcpFsStructuredLogOptIn":true}

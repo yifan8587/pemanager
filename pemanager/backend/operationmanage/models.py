@@ -21,6 +21,15 @@ class MonitorTarget(models.Model):
     count = models.PositiveSmallIntegerField('单次报文数', default=5)
     source_interface = models.CharField('源接口(可选)', max_length=128, blank=True)
     enabled = models.BooleanField('启用', default=True, db_index=True)
+    customer = models.ForeignKey(
+        'resourcemanage.ResourceCustomer',
+        verbose_name='关联客户',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='monitor_targets',
+        help_text='仅用于业务关联与权限作用域；客户账号只能看到所属客户的监控目标',
+    )
     remark = models.CharField('备注', max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -72,6 +81,15 @@ class MonitorInterface(models.Model):
     interface_name = models.CharField('接口', max_length=128, unique=True, db_index=True)
     enabled = models.BooleanField('启用', default=True, db_index=True)
     interval_sec = models.PositiveIntegerField('采样间隔(秒)', default=15)
+    customer = models.ForeignKey(
+        'resourcemanage.ResourceCustomer',
+        verbose_name='关联客户',
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name='monitor_interfaces',
+        help_text='仅用于业务关联与权限作用域；客户账号只能看到自己客户名下接口的监控对象',
+    )
     remark = models.CharField('备注', max_length=512, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -156,6 +174,49 @@ class LatencyRollup(models.Model):
 
     def __str__(self):
         return f'{self.target.name} [{self.bucket_kind}] {self.bucket_ts}'
+
+
+class DiagnosticsJob(models.Model):
+    """诊断工具的异步任务（ping/mtr 后台执行）。
+
+    使用线程在后端进程内运行；结果写入 `result` JSON 字段；前端轮询 status。
+    """
+
+    class Kind(models.TextChoices):
+        PING = 'ping', 'Ping'
+        MTR = 'mtr', 'MTR'
+
+    class Status(models.TextChoices):
+        QUEUED = 'queued', '排队中'
+        RUNNING = 'running', '运行中'
+        SUCCEEDED = 'succeeded', '已完成'
+        FAILED = 'failed', '失败'
+        CANCELLED = 'cancelled', '已取消'
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    kind = models.CharField('类型', max_length=8, choices=Kind.choices, db_index=True)
+    address = models.CharField('目标地址', max_length=255)
+    source = models.CharField('源 IP / 接口', max_length=128, blank=True)
+    count = models.PositiveIntegerField('报文数', default=10)
+
+    status = models.CharField('状态', max_length=16, choices=Status.choices, default=Status.QUEUED, db_index=True)
+    started_at = models.DateTimeField('开始时间', null=True, blank=True)
+    finished_at = models.DateTimeField('结束时间', null=True, blank=True)
+    duration_ms = models.PositiveIntegerField('耗时(ms)', null=True, blank=True)
+
+    result = models.JSONField('结果', default=dict, blank=True)
+    error = models.TextField('错误', blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = '诊断任务'
+        verbose_name_plural = verbose_name
+        ordering = ['-created_at']
+
+    def __str__(self):
+        return f'{self.kind} {self.address} ({self.status})'
 
 
 class InterfaceTrafficRollup(models.Model):

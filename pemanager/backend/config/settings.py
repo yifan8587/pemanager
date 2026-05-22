@@ -39,15 +39,19 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'rest_framework_simplejwt',
     'corsheaders',
-    'interfacemanage',
     'resourcemanage',
+    'accountmanage',
+    'interfacemanage',
     'routemanage',
     'qosmanage',
     'firewallmanage',
     'operationmanage',
     'logmanage',
 ]
+
+AUTH_USER_MODEL = 'accountmanage.User'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -58,6 +62,8 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    # 审计中间件：必须放最后，确保 status_code 已最终确定
+    'logmanage.middleware.OperationAuditMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -133,6 +139,8 @@ STATIC_URL = 'static/'
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # DRF
+# 时间统一：USE_TZ=True + TIME_ZONE=Asia/Shanghai 已让数据库存 UTC、序列化时本地化；
+# 这里显式把 DRF 输出格式锁定为 ISO 8601（带 +08:00 偏移），保证所有 API 字符串一致。
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
@@ -140,9 +148,32 @@ REST_FRAMEWORK = {
     'DEFAULT_PARSER_CLASSES': [
         'rest_framework.parsers.JSONParser',
     ],
-    'DEFAULT_PERMISSION_CLASSES': [
-        'rest_framework.permissions.AllowAny',
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        # APIToken 先看：以 `pem_` 前缀的 Bearer / X-API-Key 由它接管；
+        # 其它（JWT 字符串）放行给后面的 JWTAuthentication；
+        # 最后兜底 Session（admin / 浏览器调试）。
+        'accountmanage.authentication.APITokenAuthentication',
+        'rest_framework_simplejwt.authentication.JWTAuthentication',
+        'rest_framework.authentication.SessionAuthentication',
     ],
+    'DEFAULT_PERMISSION_CLASSES': [
+        'rest_framework.permissions.IsAuthenticated',
+    ],
+    'DATETIME_FORMAT': '%Y-%m-%dT%H:%M:%S%z',
+    'DATETIME_INPUT_FORMATS': ['iso-8601', '%Y-%m-%d %H:%M:%S', '%Y-%m-%dT%H:%M:%S'],
+    'DATE_FORMAT': '%Y-%m-%d',
+    'TIME_FORMAT': '%H:%M:%S',
+}
+
+# SimpleJWT
+from datetime import timedelta as _td  # noqa: E402
+
+SIMPLE_JWT = {
+    'ACCESS_TOKEN_LIFETIME': _td(hours=int(os.environ.get('PEM_ACCESS_TTL_HOURS', '8'))),
+    'REFRESH_TOKEN_LIFETIME': _td(days=int(os.environ.get('PEM_REFRESH_TTL_DAYS', '14'))),
+    'AUTH_HEADER_TYPES': ('Bearer',),
+    'ROTATE_REFRESH_TOKENS': False,
+    'UPDATE_LAST_LOGIN': True,
 }
 
 # 浏览器跨源访问前端时，POST/PUT 等请求需同时通过 CORS 与 CSRF 的 Origin 校验。
@@ -224,14 +255,34 @@ ROUTEMANAGE_NETPLAN_FRAGMENT_FILE = os.environ.get(
 ROUTEMANAGE_NETPLAN_TRY_TIMEOUT = int(
     os.environ.get('ROUTEMANAGE_NETPLAN_TRY_TIMEOUT', str(INTERFACEMANAGE_NETPLAN_TRY_TIMEOUT))
 )
+# WireGuard 路由：routemanage 将路由注入 /etc/wireguard/<if>.conf 的 PostUp/PostDown
+# 托管块，并通过 `wg-quick down/up` 重建接口让路由生效，同时也用同一流程回收。
+ROUTEMANAGE_IPROUTE_WRITE_ENABLED = (
+    os.environ.get('ROUTEMANAGE_IPROUTE_WRITE_ENABLED', '1') == '1'
+)
+# 策略路由（ip rule）下发
+ROUTEMANAGE_IPRULE_WRITE_ENABLED = (
+    os.environ.get('ROUTEMANAGE_IPRULE_WRITE_ENABLED', '1') == '1'
+)
+# pemanager 自行管理的 ip rule priority 区段（仅在该范围内清理旧规则）
+ROUTEMANAGE_IPRULE_OWNED_PRIO_RANGE = (
+    int(os.environ.get('ROUTEMANAGE_IPRULE_OWNED_PRIO_LO', '10000')),
+    int(os.environ.get('ROUTEMANAGE_IPRULE_OWNED_PRIO_HI', '19999')),
+)
 
 # qosmanage：HTB / fq_codel / cake 通过 `tc` 命令应用
-QOSMANAGE_APPLY_ENABLED = os.environ.get('QOSMANAGE_APPLY_ENABLED', '0') == '1'
+# 默认开启（与 routemanage 一致）；若部署在不允许 tc 的环境可设 QOSMANAGE_APPLY_ENABLED=0
+QOSMANAGE_APPLY_ENABLED = os.environ.get('QOSMANAGE_APPLY_ENABLED', '1') == '1'
 QOSMANAGE_CMD_PREFIX = os.environ.get('QOSMANAGE_CMD_PREFIX', '').strip()
 QOSMANAGE_CMD_TIMEOUT = int(os.environ.get('QOSMANAGE_CMD_TIMEOUT', '10'))
 
-# firewallmanage：nftables inet 表 pemanager
-FIREWALLMANAGE_APPLY_ENABLED = os.environ.get('FIREWALLMANAGE_APPLY_ENABLED', '0') == '1'
+# firewallmanage：nftables inet 表 pemanager 或 iptables PEMANAGER_* 链
+# 默认开启（与 routemanage/qosmanage 一致）；部署到不允许网络配置的环境可关闭
+FIREWALLMANAGE_APPLY_ENABLED = os.environ.get('FIREWALLMANAGE_APPLY_ENABLED', '1') == '1'
+
+# 运维管理：进程内常驻调度器（采样 + minute/hour/day rollup + 30 天 retention）
+# 默认不在进程启动时自启动；前端可通过 /api/operationmanage/scheduler/control/ 控制
+OPERATION_SCHEDULER_AUTOSTART = os.environ.get('OPERATION_SCHEDULER_AUTOSTART', '0') == '1'
 FIREWALLMANAGE_CMD_PREFIX = os.environ.get('FIREWALLMANAGE_CMD_PREFIX', '').strip()
 
 # logmanage：journalctl 查询

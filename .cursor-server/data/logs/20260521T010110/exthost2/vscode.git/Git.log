@@ -1,0 +1,49 @@
+2026-05-21 02:56:44.144 [info] [main] 日志级别: Info
+2026-05-21 02:56:44.144 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-21 02:56:44.243 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-21 02:56:44.243 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-21 02:56:44.317 [info] > git rev-parse --show-toplevel [32ms] (getRepositoryRoot)
+2026-05-21 02:56:44.375 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [29ms] 
+2026-05-21 02:56:44.395 [info] [Model][openRepository] Opened repository: /root
+2026-05-21 02:56:44.395 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-21 02:56:45.410 [info] > git rev-parse --show-toplevel [998ms] (getRepositoryRoot)
+2026-05-21 02:56:45.411 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-21 02:56:45.416 [info] > git config --get commit.template [1005ms] 
+2026-05-21 02:56:46.412 [info] > git check-ignore -v -z --stdin [1095ms]
+2026-05-21 02:56:46.427 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [50ms] 
+2026-05-21 02:56:46.435 [info] > git show --textconv :pemanager/backend/firewallmanage/services/iptables_writer.py [41ms]
+2026-05-21 02:56:46.436 [info] > git ls-files --stage -- pemanager/backend/firewallmanage/services/iptables_writer.py [30ms] 
+2026-05-21 02:56:46.475 [info] > git hash-object -t tree /dev/null [30ms] 
+2026-05-21 02:56:46.476 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/backend/firewallmanage/services/iptables_writer.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fiptables_writer.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:56:46.495 [info] > git hash-object -t tree /dev/null [42ms] 
+2026-05-21 02:56:46.495 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/backend/firewallmanage/services/iptables_writer.py.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fbackend%2Ffirewallmanage%2Fservices%2Fiptables_writer.py%22%2C%22ref%22%3A%22%22%7D
+2026-05-21 02:56:46.527 [info] > git check-ignore -v -z --stdin [161ms]
+2026-05-21 02:56:46.579 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [59ms] 
+2026-05-21 02:56:46.686 [info] > git blame --root --incremental c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532 -- pemanager/backend/firewallmanage/services/iptables_writer.py [4ms] 
+2026-05-21 02:56:46.686 [info] fatal: no such path pemanager/backend/firewallmanage/services/iptables_writer.py in c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532
+2026-05-21 02:56:52.190 [info] > git status -z -uall [5680ms] (cancelled)
+2026-05-21 02:56:52.191 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3465ms] 
+2026-05-21 02:56:52.262 [info] > git config --get --local branch.main.vscode-merge-base [45ms] 
+2026-05-21 02:56:52.262 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-21 02:56:52.271 [info] > git config --get commit.template [124ms] 
+2026-05-21 02:56:52.281 [info] > git reflog main --grep-reflog=branch: Created from *. [11ms] 
+2026-05-21 02:56:52.288 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [8ms] 
+2026-05-21 02:56:52.289 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [2ms] 
+2026-05-21 02:56:52.289 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-21 02:56:52.289 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-21 02:56:52.312 [info] > git merge-base refs/heads/main refs/remotes/origin/main [15ms] 
+2026-05-21 02:56:52.321 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [10ms] 
+2026-05-21 02:56:52.322 [info] > git diff --name-status -z --diff-filter=ADMR c2286bb4bfb8d1d7468d0684edeac1f5bf6a9532...refs/remotes/origin/main [2ms] 
+2026-05-21 02:56:54.563 [info] > git config --global user.name [8ms] 
+2026-05-21 02:56:54.576 [info] > git config --global user.email [5ms] 
+2026-05-21 02:56:54.576 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-21 02:56:57.770 [info] > git status -z -uall [5466ms] (cancelled)
+2026-05-21 02:57:17.574 [info] > git check-ignore -v -z --stdin [70ms]
+2026-05-21 02:57:18.705 [info] > git check-ignore -v -z --stdin [50ms]
+2026-05-21 02:57:27.294 [info] > git check-ignore -v -z --stdin [52ms]
+2026-05-21 02:57:34.266 [info] > git check-ignore -v -z --stdin [56ms]
+2026-05-21 02:57:38.111 [info] > git check-ignore -v -z --stdin [35ms]
+2026-05-21 03:07:35.207 [info] > git check-ignore -v -z --stdin [44ms]
+2026-05-21 03:19:10.910 [info] > git check-ignore -v -z --stdin [61ms]
+2026-05-21 03:19:12.047 [info] > git check-ignore -v -z --stdin [35ms]
+2026-05-21 03:19:12.683 [info] > git check-ignore -v -z --stdin [42ms]

@@ -2,30 +2,43 @@ from datetime import datetime
 
 from django.utils.dateparse import parse_datetime
 from rest_framework import status, viewsets
-from rest_framework.decorators import action, api_view
+from rest_framework.decorators import action, api_view, permission_classes as drf_permission_classes
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from accountmanage.permissions import IsAdmin, ReadOnlyForCustomer
+from accountmanage.scoped_mixins import AdminOnlyMixin
+from accountmanage.services.scope import scope_interface_codes
+
 from operationmanage.models import (
+    DiagnosticsJob,
+    InterfaceTrafficRollup,
     InterfaceTrafficSample,
+    LatencyRollup,
     LatencySample,
+    MonitorInterface,
     MonitorTarget,
 )
 from operationmanage.serializers import (
+    DiagnosticsJobSerializer,
     InterfaceTrafficSampleSerializer,
     LatencySampleSerializer,
+    MonitorInterfaceSerializer,
     MonitorTargetSerializer,
+    ToolDiagnoseSerializer,
     ToolMtrSerializer,
     ToolPingSerializer,
     TrafficBatchRequestSerializer,
     TrafficSampleRequestSerializer,
 )
-from operationmanage.services import aggregate, probes, sampler
+from operationmanage.services import aggregate, async_jobs, probes, sampler, scheduler
 
 APP_NAME = 'operationmanage'
 
 
 @api_view(['GET'])
+@drf_permission_classes([AllowAny])
 def health(_request):
     return Response({'app': APP_NAME, 'status': 'ok'})
 
@@ -33,36 +46,109 @@ def health(_request):
 # ---------- 工具：ping / mtr / traffic ----------
 
 
+def _should_async(count: int, async_flag) -> bool:
+    if async_flag is True:
+        return True
+    if async_flag is False:
+        return False
+    return int(count or 0) > async_jobs.ASYNC_THRESHOLD
+
+
 class ToolPingView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
     def post(self, request):
         s = ToolPingSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         v = s.validated_data
-        out = probes.ping(
-            v['address'],
-            count=v.get('count') or 5,
-            source=(v.get('source') or '').strip() or None,
-        )
-        return Response(out)
+        count = int(v.get('count') or 5)
+        source = (v.get('source') or '').strip() or None
+        if _should_async(count, v.get('async_run')):
+            job = async_jobs.submit('ping', v['address'], count=count, source=source)
+            return Response({'async': True, 'job': async_jobs.serialize(job)})
+        out = probes.ping(v['address'], count=count, source=source)
+        return Response({'async': False, **out})
 
 
 class ToolMtrView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
     def post(self, request):
         s = ToolMtrSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         v = s.validated_data
-        out = probes.mtr(
+        count = int(v.get('count') or 5)
+        source = (v.get('source') or '').strip() or None
+        if _should_async(count, v.get('async_run')):
+            job = async_jobs.submit('mtr', v['address'], count=count, source=source)
+            return Response({'async': True, 'job': async_jobs.serialize(job)})
+        out = probes.mtr(v['address'], count=count, source=source)
+        return Response({'async': False, **out})
+
+
+class ToolDiagnoseView(APIView):
+    """一站式网络诊断：ip route get + 推断源 IP + ping (+可选 traceroute)。"""
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request):
+        s = ToolDiagnoseSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        v = s.validated_data
+        out = probes.network_diagnose(
             v['address'],
-            count=v.get('count') or 5,
             source=(v.get('source') or '').strip() or None,
+            ping_count=int(v.get('ping_count') or 5),
+            do_traceroute=bool(v.get('do_traceroute')),
+            traceroute_max_hops=int(v.get('traceroute_max_hops') or 10),
         )
         return Response(out)
+
+
+class ToolJobView(APIView):
+    """GET /api/operationmanage/tools/jobs/<id>/"""
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, _request, job_id):
+        try:
+            job = DiagnosticsJob.objects.get(pk=job_id)
+        except DiagnosticsJob.DoesNotExist:
+            return Response({'detail': 'job not found'}, status=status.HTTP_404_NOT_FOUND)
+        return Response(async_jobs.serialize(job))
+
+
+class ToolJobsView(APIView):
+    """GET /api/operationmanage/tools/jobs/?kind=ping&status=running&limit=20"""
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, request):
+        qs = DiagnosticsJob.objects.all()
+        p = request.query_params
+        if p.get('kind'):
+            qs = qs.filter(kind=p['kind'])
+        if p.get('status'):
+            qs = qs.filter(status=p['status'])
+        try:
+            limit = int(p.get('limit') or 30)
+        except ValueError:
+            limit = 30
+        rows = list(qs[:limit])
+        return Response([async_jobs.serialize(j) for j in rows])
 
 
 class ToolTrafficLiveView(APIView):
     """前端轮询使用：单接口窗口 bps（替代 nload 的可视）。"""
 
+    permission_classes = [IsAuthenticated]
+
     def post(self, request):
+        # 客户只能采样自己可见接口
+        codes = scope_interface_codes(request.user)
+        iface = (request.data or {}).get('interface') or ''
+        if codes is not None and iface not in codes:
+            return Response({'detail': '无权访问该接口'}, status=status.HTTP_403_FORBIDDEN)
         s = TrafficSampleRequestSerializer(data=request.data)
         s.is_valid(raise_exception=True)
         v = s.validated_data
@@ -73,6 +159,8 @@ class ToolTrafficLiveView(APIView):
 class ToolTrafficBatchView(APIView):
     """一次给多接口的累计字节 + bps 增量快照（落库）。"""
 
+    permission_classes = [IsAuthenticated, IsAdmin]
+
     def post(self, request):
         s = TrafficBatchRequestSerializer(data=request.data)
         s.is_valid(raise_exception=True)
@@ -82,6 +170,8 @@ class ToolTrafficBatchView(APIView):
 class ToolTrafficSnapshotView(APIView):
     """GET: /proc/net/dev 全量累计快照（不落库）。"""
 
+    permission_classes = [IsAuthenticated, IsAdmin]
+
     def get(self, _request):
         return Response(probes.proc_net_dev_all())
 
@@ -89,11 +179,66 @@ class ToolTrafficSnapshotView(APIView):
 # ---------- 监控目标 CRUD ----------
 
 
-class MonitorTargetViewSet(viewsets.ModelViewSet):
-    queryset = MonitorTarget.objects.all().order_by('name')
-    serializer_class = MonitorTargetSerializer
+def _normalize_bucket(name: str | None) -> str:
+    """前端可能传 month，但月维度直接用 day rollup 聚合即可；这里只接 minute/hour/day。"""
+    n = (name or 'hour').lower()
+    if n == 'month':
+        return 'day'
+    if n not in ('minute', 'hour', 'day'):
+        return 'hour'
+    return n
 
-    @action(detail=True, methods=['post'], url_path='sample-now')
+
+def _serialize_latency_rollups(qs) -> list[dict]:
+    out = []
+    for r in qs.order_by('bucket_ts'):
+        out.append({
+            'bucket': r.bucket_ts.isoformat() if r.bucket_ts else None,
+            'rtt_avg_ms': r.rtt_avg_ms,
+            'rtt_min_ms': r.rtt_min_ms,
+            'rtt_max_ms': r.rtt_max_ms,
+            'jitter_ms': r.jitter_ms,
+            'loss_pct': r.loss_pct,
+            'samples': r.samples,
+            'ok_samples': r.ok_samples,
+            'packets_sent': r.packets_sent,
+            'packets_recv': r.packets_recv,
+        })
+    return out
+
+
+def _serialize_traffic_rollups(qs) -> list[dict]:
+    out = []
+    for r in qs.order_by('bucket_ts'):
+        out.append({
+            'bucket': r.bucket_ts.isoformat() if r.bucket_ts else None,
+            'rx_bps_avg': r.rx_bps_avg,
+            'tx_bps_avg': r.tx_bps_avg,
+            'rx_bps_max': r.rx_bps_max,
+            'tx_bps_max': r.tx_bps_max,
+            'rx_bytes_delta': r.rx_bytes_delta,
+            'tx_bytes_delta': r.tx_bytes_delta,
+            'samples': r.samples,
+        })
+    return out
+
+
+class MonitorTargetViewSet(viewsets.ModelViewSet):
+    """品质监控目标：客户可读自己客户名下监控目标，或源接口属于客户的接口集合；admin 全管。"""
+
+    queryset = MonitorTarget.objects.select_related('customer').all().order_by('name')
+    serializer_class = MonitorTargetSerializer
+    permission_classes = [IsAuthenticated, ReadOnlyForCustomer]
+
+    def get_queryset(self):
+        from accountmanage.services.scope import scope_qs
+        return scope_qs(
+            super().get_queryset(), self.request.user,
+            customer_field='customer',
+            interface_field='source_interface',
+        )
+
+    @action(detail=True, methods=['post'], url_path='sample-now', permission_classes=[IsAuthenticated, IsAdmin])
     def sample_now(self, request, pk=None):
         target = self.get_object()
         try:
@@ -102,33 +247,147 @@ class MonitorTargetViewSet(viewsets.ModelViewSet):
             return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
         return Response(LatencySampleSerializer(s).data)
 
+    @action(detail=True, methods=['post'], url_path='diagnose', permission_classes=[IsAuthenticated, IsAdmin])
+    def diagnose(self, request, pk=None):
+        """一键诊断当前目标：路由查询 + 推断源 IP + ping，可选 traceroute。"""
+        target = self.get_object()
+        do_tr = bool((request.data or {}).get('do_traceroute'))
+        try:
+            out = probes.network_diagnose(
+                target.address,
+                source=(target.source_interface or '').strip() or None,
+                ping_count=int(target.count or 5),
+                do_traceroute=do_tr,
+            )
+        except Exception as exc:  # noqa: BLE001
+            return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response(out)
+
     @action(detail=True, methods=['get'], url_path='series')
     def series(self, request, pk=None):
-        """按 bucket=hour|day|month 聚合延迟样本。"""
+        """按 bucket=minute|hour|day 返回延迟系列；优先走 rollup 表；fallback 用 raw 聚合。"""
         target = self.get_object()
         p = request.query_params
-        bucket = p.get('bucket') or 'hour'
-        qs = target.latency_samples.all()
+        bucket = _normalize_bucket(p.get('bucket'))
         since = parse_datetime(p.get('since') or '') if p.get('since') else None
         until = parse_datetime(p.get('until') or '') if p.get('until') else None
-        if since:
-            qs = qs.filter(ts__gte=since)
-        if until:
-            qs = qs.filter(ts__lt=until)
         try:
-            limit = int(p.get('limit') or 1000)
+            limit = int(p.get('limit') or 2000)
         except ValueError:
-            limit = 1000
-        series = aggregate.latency_series(qs, bucket=bucket)
-        if len(series) > limit:
-            series = series[-limit:]
-        return Response({'target': target.name, 'bucket': bucket, 'points': series})
+            limit = 2000
+
+        rollup_qs = LatencyRollup.objects.filter(target=target, bucket_kind=bucket)
+        if since:
+            rollup_qs = rollup_qs.filter(bucket_ts__gte=since)
+        if until:
+            rollup_qs = rollup_qs.filter(bucket_ts__lt=until)
+
+        if rollup_qs.exists():
+            points = _serialize_latency_rollups(rollup_qs)
+            source = 'rollup'
+        else:
+            raw_qs = target.latency_samples.all()
+            if since:
+                raw_qs = raw_qs.filter(ts__gte=since)
+            if until:
+                raw_qs = raw_qs.filter(ts__lt=until)
+            points = aggregate.latency_series(raw_qs, bucket=bucket if bucket != 'minute' else 'hour')
+            source = 'raw'
+        if len(points) > limit:
+            points = points[-limit:]
+        return Response({'target': target.name, 'bucket': bucket, 'source': source, 'points': points})
+
+
+class MonitorInterfaceViewSet(viewsets.ModelViewSet):
+    """接口流量监控对象：客户可读 customer FK 命中 ∪ 自己接口集合内的；admin 全管。"""
+
+    queryset = MonitorInterface.objects.select_related('customer').all().order_by('interface_name')
+    serializer_class = MonitorInterfaceSerializer
+    permission_classes = [IsAuthenticated, ReadOnlyForCustomer]
+
+    def get_queryset(self):
+        from accountmanage.services.scope import scope_qs
+        return scope_qs(
+            super().get_queryset(), self.request.user,
+            customer_field='customer',
+            interface_field='interface_name',
+        )
+
+    @action(detail=True, methods=['post'], url_path='sample-now', permission_classes=[IsAuthenticated, IsAdmin])
+    def sample_now(self, _request, pk=None):
+        mi = self.get_object()
+        try:
+            out = sampler.sample_one_monitor_interface(mi)
+        except Exception as exc:  # noqa: BLE001
+            return Response({'ok': False, 'error': str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        return Response(out)
+
+    @action(detail=True, methods=['get'], url_path='series')
+    def series(self, request, pk=None):
+        mi = self.get_object()
+        p = request.query_params
+        bucket = _normalize_bucket(p.get('bucket'))
+        since = parse_datetime(p.get('since') or '') if p.get('since') else None
+        until = parse_datetime(p.get('until') or '') if p.get('until') else None
+        try:
+            limit = int(p.get('limit') or 2000)
+        except ValueError:
+            limit = 2000
+        rollup_qs = InterfaceTrafficRollup.objects.filter(
+            interface_name=mi.interface_name, bucket_kind=bucket,
+        )
+        if since:
+            rollup_qs = rollup_qs.filter(bucket_ts__gte=since)
+        if until:
+            rollup_qs = rollup_qs.filter(bucket_ts__lt=until)
+        if rollup_qs.exists():
+            points = _serialize_traffic_rollups(rollup_qs)
+            source = 'rollup'
+        else:
+            raw = InterfaceTrafficSample.objects.filter(interface_name=mi.interface_name)
+            if since:
+                raw = raw.filter(ts__gte=since)
+            if until:
+                raw = raw.filter(ts__lt=until)
+            points = aggregate.traffic_series(raw, bucket=bucket if bucket != 'minute' else 'hour')
+            source = 'raw'
+        if len(points) > limit:
+            points = points[-limit:]
+        return Response({
+            'interface_name': mi.interface_name, 'bucket': bucket, 'source': source, 'points': points,
+        })
+
+
+# ---------- 调度器：状态与控制 ----------
+
+
+class SchedulerStatusView(APIView):
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def get(self, _request):
+        return Response(scheduler.status())
+
+
+class SchedulerControlView(APIView):
+    """POST {action: start|stop|restart}"""
+
+    permission_classes = [IsAuthenticated, IsAdmin]
+
+    def post(self, request):
+        act = (request.data or {}).get('action') or ''
+        if act == 'start':
+            return Response(scheduler.start())
+        if act == 'stop':
+            return Response(scheduler.stop())
+        if act == 'restart':
+            return Response(scheduler.restart())
+        return Response({'detail': 'action 必须为 start|stop|restart'}, status=status.HTTP_400_BAD_REQUEST)
 
 
 # ---------- 样本只读 ----------
 
 
-class LatencySampleViewSet(viewsets.ReadOnlyModelViewSet):
+class LatencySampleViewSet(AdminOnlyMixin, viewsets.ReadOnlyModelViewSet):
     queryset = LatencySample.objects.select_related('target').all()
     serializer_class = LatencySampleSerializer
 
@@ -152,9 +411,13 @@ class LatencySampleViewSet(viewsets.ReadOnlyModelViewSet):
 class InterfaceTrafficSampleViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = InterfaceTrafficSample.objects.all()
     serializer_class = InterfaceTrafficSampleSerializer
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         qs = super().get_queryset()
+        codes = scope_interface_codes(self.request.user)
+        if codes is not None:
+            qs = qs.filter(interface_name__in=list(codes) or [''])
         p = self.request.query_params
         ifn = p.get('interface')
         if ifn:
@@ -171,26 +434,38 @@ class InterfaceTrafficSampleViewSet(viewsets.ReadOnlyModelViewSet):
 
 
 class InterfaceTrafficSeriesView(APIView):
-    """GET: ?interface=eth0&bucket=hour|day|month&since=&until="""
+    """GET: ?interface=eth0&bucket=minute|hour|day&since=&until="""
+
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         p = request.query_params
         ifn = p.get('interface')
         if not ifn:
             return Response({'detail': '缺少 interface'}, status=status.HTTP_400_BAD_REQUEST)
-        bucket = p.get('bucket') or 'hour'
-        qs = InterfaceTrafficSample.objects.filter(interface_name=ifn)
+        codes = scope_interface_codes(request.user)
+        if codes is not None and ifn not in codes:
+            return Response({'detail': '无权访问该接口'}, status=status.HTTP_403_FORBIDDEN)
+        bucket = _normalize_bucket(p.get('bucket'))
+        rollup_qs = InterfaceTrafficRollup.objects.filter(interface_name=ifn, bucket_kind=bucket)
         if p.get('since'):
-            qs = qs.filter(ts__gte=p['since'])
+            rollup_qs = rollup_qs.filter(bucket_ts__gte=p['since'])
         if p.get('until'):
-            qs = qs.filter(ts__lt=p['until'])
-        return Response(
-            {
-                'interface': ifn,
-                'bucket': bucket,
-                'points': aggregate.traffic_series(qs, bucket=bucket),
-            }
-        )
+            rollup_qs = rollup_qs.filter(bucket_ts__lt=p['until'])
+        if rollup_qs.exists():
+            return Response({
+                'interface': ifn, 'bucket': bucket, 'source': 'rollup',
+                'points': _serialize_traffic_rollups(rollup_qs),
+            })
+        raw = InterfaceTrafficSample.objects.filter(interface_name=ifn)
+        if p.get('since'):
+            raw = raw.filter(ts__gte=p['since'])
+        if p.get('until'):
+            raw = raw.filter(ts__lt=p['until'])
+        return Response({
+            'interface': ifn, 'bucket': bucket, 'source': 'raw',
+            'points': aggregate.traffic_series(raw, bucket=bucket if bucket != 'minute' else 'hour'),
+        })
 
 
 # ---------- 触发采样 ----------

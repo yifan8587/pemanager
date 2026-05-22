@@ -1,0 +1,637 @@
+<script setup>
+import { computed, onMounted, onUnmounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import {
+  Cpu,
+  VideoPlay,
+  VideoPause,
+  RefreshRight,
+  TrendCharts,
+  Aim,
+} from '@element-plus/icons-vue'
+import { operationApi } from '../../api/operationApi'
+import { interfaceApi } from '../../api/interfaceApi'
+import PageHeader from '../../components/PageHeader.vue'
+import { formatDateTimeTz } from '../../utils/format'
+
+// ---------------- 接口下拉（用于源接口 / 选择被监控接口） ----------------
+const ifaces = ref([])
+async function loadIfaces() {
+  try {
+    const { data } = await interfaceApi.liveInventory()
+    ifaces.value = data.interfaces || []
+  } catch {
+    ifaces.value = []
+  }
+}
+
+// ---------------- 调度器状态 ----------------
+const sched = ref({ running: false })
+const schedLoading = ref(false)
+let schedTimer = null
+
+async function loadScheduler() {
+  try {
+    sched.value = await operationApi.schedulerStatus()
+  } catch {
+    sched.value = { running: false, errors: [{ msg: 'API 不可达' }] }
+  }
+}
+async function controlScheduler(action) {
+  schedLoading.value = true
+  try {
+    const out = await operationApi.schedulerControl(action)
+    sched.value = out
+    ElMessage.success(`调度器 ${action} 已执行`)
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '操作失败')
+  } finally {
+    schedLoading.value = false
+  }
+}
+
+const schedRunningTag = computed(() => (sched.value?.running ? 'success' : 'info'))
+const schedRunningText = computed(() => (sched.value?.running ? '运行中' : '已停止'))
+
+// ---------------- ping/mtr 目标 ----------------
+const pingRows = ref([])
+const pingLoading = ref(false)
+const pingDlg = ref(false)
+const pingEditingId = ref(null)
+const pingSaving = ref(false)
+const pingForm = reactive({
+  name: '',
+  address: '',
+  kind: 'ping',
+  interval_sec: 60,
+  count: 5,
+  source_interface: '',
+  enabled: true,
+  remark: '',
+})
+
+async function loadPing() {
+  pingLoading.value = true
+  try {
+    pingRows.value = await operationApi.listTargets()
+  } finally {
+    pingLoading.value = false
+  }
+}
+function openPingCreate() {
+  pingEditingId.value = null
+  Object.assign(pingForm, {
+    name: '',
+    address: '',
+    kind: 'ping',
+    interval_sec: 60,
+    count: 5,
+    source_interface: '',
+    enabled: true,
+    remark: '',
+  })
+  pingDlg.value = true
+}
+function openPingEdit(r) {
+  pingEditingId.value = r.id
+  Object.assign(pingForm, { ...r })
+  pingDlg.value = true
+}
+async function savePing() {
+  pingSaving.value = true
+  try {
+    if (pingEditingId.value) await operationApi.patchTarget(pingEditingId.value, pingForm)
+    else await operationApi.createTarget(pingForm)
+    ElMessage.success('已保存')
+    pingDlg.value = false
+    await loadPing()
+  } catch (e) {
+    ElMessage.error(JSON.stringify(e?.response?.data || e.message))
+  } finally {
+    pingSaving.value = false
+  }
+}
+async function removePing(r) {
+  try {
+    await ElMessageBox.confirm(`删除监控目标 ${r.name}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  await operationApi.deleteTarget(r.id)
+  ElMessage.success('已删除')
+  await loadPing()
+}
+async function togglePing(r) {
+  try {
+    await operationApi.patchTarget(r.id, { enabled: !r.enabled })
+    await loadPing()
+  } catch (e) {
+    ElMessage.error('切换失败')
+  }
+}
+async function samplePingNow(r) {
+  try {
+    const data = await operationApi.sampleNow(r.id)
+    const ok = data?.ok
+    const recv = data?.packets_recv ?? 0
+    const sent = data?.packets_sent ?? 0
+    const loss = data?.loss_pct
+    const avg = data?.rtt_avg_ms
+    const diag = data?.detail?.diagnosis || ''
+    const errText = data?.detail?.error || ''
+    if (ok) {
+      const tag = diag === 'partial_loss' ? `（有部分丢包 ${loss}%）` : ''
+      ElMessage.success(
+        `采样成功：${recv}/${sent} 收到，avg=${avg ?? '—'} ms，loss=${loss ?? '—'}%${tag}`,
+      )
+    } else {
+      const label =
+        diag === 'all_packets_lost'
+          ? '目标 100% 无回应（命令执行正常）'
+          : diag === 'subprocess_timeout'
+            ? 'ping 超时'
+            : diag === 'binary_error'
+              ? 'ping 启动失败'
+              : '采样未通'
+      ElMessage({
+        type: 'warning',
+        message: `${label}：${recv}/${sent} 收到，loss=${loss ?? '—'}%${errText ? '；' + errText : ''}`,
+        duration: 6000,
+        showClose: true,
+      })
+    }
+    await loadPing()
+  } catch (e) {
+    ElMessage.error(JSON.stringify(e?.response?.data || e.message))
+  }
+}
+
+// ----- 一键诊断 -----
+const diagDlg = ref(false)
+const diagLoading = ref(false)
+const diagTarget = ref(null)
+const diagResult = ref(null)
+const diagWithTraceroute = ref(false)
+const diagCollapse = ref(['route', 'ping', 'trace'])
+
+async function openDiagnose(r) {
+  diagTarget.value = r
+  diagResult.value = null
+  diagWithTraceroute.value = false
+  diagDlg.value = true
+  await runDiagnose()
+}
+async function runDiagnose() {
+  if (!diagTarget.value) return
+  diagLoading.value = true
+  try {
+    diagResult.value = await operationApi.diagnoseTarget(diagTarget.value.id, {
+      do_traceroute: diagWithTraceroute.value,
+    })
+  } catch (e) {
+    ElMessage.error('诊断失败')
+  } finally {
+    diagLoading.value = false
+  }
+}
+function diagSummaryType() {
+  const d = diagResult.value?.summary?.diagnosis
+  if (d === 'ok') return 'success'
+  if (d === 'partial_loss') return 'warning'
+  return 'error'
+}
+
+// ---------------- 接口流量监控对象 ----------------
+const ifMonRows = ref([])
+const ifMonLoading = ref(false)
+const ifMonDlg = ref(false)
+const ifMonEditingId = ref(null)
+const ifMonSaving = ref(false)
+const ifMonForm = reactive({
+  interface_name: '',
+  enabled: true,
+  interval_sec: 15,
+  remark: '',
+})
+
+async function loadIfMon() {
+  ifMonLoading.value = true
+  try {
+    ifMonRows.value = await operationApi.listMonitorInterfaces()
+  } finally {
+    ifMonLoading.value = false
+  }
+}
+function openIfMonCreate() {
+  ifMonEditingId.value = null
+  Object.assign(ifMonForm, { interface_name: '', enabled: true, interval_sec: 15, remark: '' })
+  ifMonDlg.value = true
+}
+function openIfMonEdit(r) {
+  ifMonEditingId.value = r.id
+  Object.assign(ifMonForm, { ...r })
+  ifMonDlg.value = true
+}
+async function saveIfMon() {
+  ifMonSaving.value = true
+  try {
+    if (ifMonEditingId.value) await operationApi.patchMonitorInterface(ifMonEditingId.value, ifMonForm)
+    else await operationApi.createMonitorInterface(ifMonForm)
+    ElMessage.success('已保存')
+    ifMonDlg.value = false
+    await loadIfMon()
+  } catch (e) {
+    ElMessage.error(JSON.stringify(e?.response?.data || e.message))
+  } finally {
+    ifMonSaving.value = false
+  }
+}
+async function removeIfMon(r) {
+  try {
+    await ElMessageBox.confirm(`删除接口监控 ${r.interface_name}？`, '确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  await operationApi.deleteMonitorInterface(r.id)
+  ElMessage.success('已删除')
+  await loadIfMon()
+}
+async function toggleIfMon(r) {
+  try {
+    await operationApi.patchMonitorInterface(r.id, { enabled: !r.enabled })
+    await loadIfMon()
+  } catch (e) {
+    ElMessage.error('切换失败')
+  }
+}
+async function sampleIfMonNow(r) {
+  try {
+    const out = await operationApi.sampleMonitorInterfaceNow(r.id)
+    ElMessage.success(`已采样：RX ${((out.rx_bps || 0) / 1e6).toFixed(3)} / TX ${((out.tx_bps || 0) / 1e6).toFixed(3)} Mbps`)
+    await loadIfMon()
+  } catch (e) {
+    ElMessage.error('采样失败')
+  }
+}
+
+// ---------------- 立即采样全部 ----------------
+async function sampleAll() {
+  try {
+    const ifs = ifMonRows.value.filter((x) => x.enabled).map((x) => x.interface_name)
+    const data = await operationApi.sampleAllNow(ifs)
+    ElMessage.success(
+      `已采样 ${data?.latency?.count ?? 0} 个目标 + ${data?.traffic?.count ?? 0} 个接口`,
+    )
+    await Promise.all([loadPing(), loadIfMon()])
+  } catch (e) {
+    ElMessage.error('采样失败')
+  }
+}
+
+onMounted(() => {
+  loadPing()
+  loadIfMon()
+  loadIfaces()
+  loadScheduler()
+  // 状态轮询
+  schedTimer = setInterval(loadScheduler, 5000)
+})
+onUnmounted(() => {
+  if (schedTimer) clearInterval(schedTimer)
+})
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader
+      title="品质监控"
+      description="后台调度器持续采样 ping/mtr 与接口流量；按分钟/小时/天滚动汇总；自动覆盖一月前的明细。"
+      :icon="Cpu"
+    >
+      <template #actions>
+        <el-button @click="sampleAll">立即采样全部</el-button>
+        <el-button :icon="RefreshRight" @click="loadScheduler">刷新</el-button>
+      </template>
+    </PageHeader>
+
+    <!-- ============ 调度器状态卡 ============ -->
+    <el-card shadow="never">
+      <template #header>
+        <div class="row">
+          <el-icon><TrendCharts /></el-icon>
+          <span>后台调度器</span>
+          <el-tag :type="schedRunningTag" effect="dark" size="small">{{ schedRunningText }}</el-tag>
+          <div class="spacer" />
+          <el-button
+            v-if="!sched.running"
+            type="primary"
+            :icon="VideoPlay"
+            :loading="schedLoading"
+            @click="controlScheduler('start')"
+          >
+            启动调度器
+          </el-button>
+          <el-button
+            v-else
+            type="danger"
+            :icon="VideoPause"
+            :loading="schedLoading"
+            @click="controlScheduler('stop')"
+          >
+            停止调度器
+          </el-button>
+          <el-button
+            :icon="RefreshRight"
+            :loading="schedLoading"
+            @click="controlScheduler('restart')"
+          >
+            重启
+          </el-button>
+        </div>
+      </template>
+      <el-descriptions :column="3" border size="small">
+        <el-descriptions-item label="节拍 (秒)">{{ sched.tick_sec || '—' }}</el-descriptions-item>
+        <el-descriptions-item label="累计 tick">{{ sched.tick_count || 0 }}</el-descriptions-item>
+        <el-descriptions-item label="启动时间">{{ formatDateTimeTz(sched.started_at) }}</el-descriptions-item>
+        <el-descriptions-item label="本次 tick">{{ formatDateTimeTz(sched.last_tick_at) }}</el-descriptions-item>
+        <el-descriptions-item label="到期 ping/mtr">{{ sched.due_target_count ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item label="到期接口">{{ sched.due_iface_count ?? 0 }}</el-descriptions-item>
+        <el-descriptions-item label="最近 minute 汇总">{{ formatDateTimeTz(sched.last_minute_rollup_at) }}</el-descriptions-item>
+        <el-descriptions-item label="最近 hour 汇总">{{ formatDateTimeTz(sched.last_hour_rollup_at) }}</el-descriptions-item>
+        <el-descriptions-item label="最近 day 汇总">{{ formatDateTimeTz(sched.last_day_rollup_at) }}</el-descriptions-item>
+        <el-descriptions-item label="最近 retention" :span="3">
+          {{ formatDateTimeTz(sched.last_retention_at) }}
+          <span v-if="sched.last_retention_summary" class="muted" style="margin-left:8px">
+            清理 raw L/T = {{ sched.last_retention_summary.latency_raw }} / {{ sched.last_retention_summary.traffic_raw }}，
+            minute L/T = {{ sched.last_retention_summary.latency_minute }} / {{ sched.last_retention_summary.traffic_minute }}
+          </span>
+        </el-descriptions-item>
+      </el-descriptions>
+      <el-alert
+        v-if="sched.errors?.length"
+        :title="`最近 ${sched.errors.length} 条错误`"
+        type="warning"
+        show-icon
+        :closable="false"
+        style="margin-top:10px"
+      >
+        <ul class="errlist">
+          <li v-for="(e, idx) in sched.errors" :key="idx">
+            <span class="muted">{{ formatDateTimeTz(e.at) }}</span> {{ e.msg }}
+          </li>
+        </ul>
+      </el-alert>
+    </el-card>
+
+    <!-- ============ ping/mtr 监控目标 ============ -->
+    <el-card shadow="never">
+      <template #header>
+        <div class="row">
+          <span>① Ping / MTR 监控目标</span>
+          <el-tag size="small" type="info">{{ pingRows.length }} 个</el-tag>
+          <div class="spacer" />
+          <el-button type="primary" @click="openPingCreate">新增目标</el-button>
+          <el-button :loading="pingLoading" @click="loadPing">刷新</el-button>
+        </div>
+      </template>
+      <el-table :data="pingRows" border size="small" v-loading="pingLoading">
+        <el-table-column label="启用" width="70">
+          <template #default="{ row }">
+            <el-switch :model-value="row.enabled" @change="togglePing(row)" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="name" label="名称" min-width="140" />
+        <el-table-column prop="address" label="地址" min-width="160" />
+        <el-table-column prop="kind" label="类型" width="80">
+          <template #default="{ row }">
+            <el-tag :type="row.kind === 'mtr' ? 'warning' : 'primary'" size="small">{{ row.kind }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="interval_sec" label="间隔(s)" width="90" />
+        <el-table-column prop="count" label="报文数" width="80" />
+        <el-table-column prop="source_interface" label="源接口" width="120" />
+        <el-table-column label="最近采样" min-width="200">
+          <template #default="{ row }">{{ formatDateTimeTz(row.last_sampled_at) }}</template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="120" />
+        <el-table-column label="操作" width="280" fixed="right">
+          <template #default="{ row }">
+            <el-button link size="small" type="primary" @click="samplePingNow(row)">立即采样</el-button>
+            <el-button link size="small" type="warning" @click="openDiagnose(row)">诊断</el-button>
+            <el-button link size="small" @click="openPingEdit(row)">编辑</el-button>
+            <el-button link size="small" type="danger" @click="removePing(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <!-- ============ 接口流量监控对象 ============ -->
+    <el-card shadow="never">
+      <template #header>
+        <div class="row">
+          <span>② 接口流量监控对象</span>
+          <el-tag size="small" type="info">{{ ifMonRows.length }} 个</el-tag>
+          <div class="spacer" />
+          <el-button type="primary" @click="openIfMonCreate">新增接口</el-button>
+          <el-button :loading="ifMonLoading" @click="loadIfMon">刷新</el-button>
+        </div>
+      </template>
+      <el-table :data="ifMonRows" border size="small" v-loading="ifMonLoading">
+        <el-table-column label="启用" width="70">
+          <template #default="{ row }">
+            <el-switch :model-value="row.enabled" @change="toggleIfMon(row)" />
+          </template>
+        </el-table-column>
+        <el-table-column prop="interface_name" label="接口" min-width="160" />
+        <el-table-column prop="interval_sec" label="采样间隔(s)" width="120" />
+        <el-table-column label="最近采样" min-width="200">
+          <template #default="{ row }">{{ formatDateTimeTz(row.last_sampled_at) }}</template>
+        </el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="160" />
+        <el-table-column label="操作" width="240" fixed="right">
+          <template #default="{ row }">
+            <el-button link size="small" type="primary" @click="sampleIfMonNow(row)">立即采样</el-button>
+            <el-button link size="small" @click="openIfMonEdit(row)">编辑</el-button>
+            <el-button link size="small" type="danger" @click="removeIfMon(row)">删除</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
+    <!-- ============ ping/mtr 编辑对话框 ============ -->
+    <el-dialog
+      v-model="pingDlg"
+      :title="pingEditingId ? '编辑 Ping/MTR 目标' : '新增 Ping/MTR 目标'"
+      width="560px"
+      destroy-on-close
+    >
+      <el-form label-width="110px">
+        <el-form-item label="名称" required><el-input v-model="pingForm.name" /></el-form-item>
+        <el-form-item label="目标地址" required>
+          <el-input v-model="pingForm.address" placeholder="IP 或主机名" />
+        </el-form-item>
+        <el-form-item label="类型">
+          <el-radio-group v-model="pingForm.kind">
+            <el-radio-button label="ping">Ping (ICMP)</el-radio-button>
+            <el-radio-button label="mtr">MTR</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="采样间隔(s)">
+          <el-input-number v-model="pingForm.interval_sec" :min="5" :max="86400" :step="5" />
+          <small class="muted" style="margin-left:8px">建议 60~300 秒</small>
+        </el-form-item>
+        <el-form-item label="单次报文数">
+          <el-input-number v-model="pingForm.count" :min="1" :max="30" />
+        </el-form-item>
+        <el-form-item label="源接口/IP">
+          <el-select
+            v-model="pingForm.source_interface"
+            filterable
+            clearable
+            allow-create
+            placeholder="可选"
+            style="width:100%"
+          >
+            <el-option v-for="i in ifaces" :key="i.ifname" :label="i.ifname" :value="i.ifname" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="启用"><el-switch v-model="pingForm.enabled" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="pingForm.remark" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="pingDlg = false">取消</el-button>
+        <el-button type="primary" :loading="pingSaving" @click="savePing">保存</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ============ 一键诊断对话框 ============ -->
+    <el-dialog
+      v-model="diagDlg"
+      :title="`诊断：${diagTarget?.name || ''} (${diagTarget?.address || ''})`"
+      width="780px"
+      destroy-on-close
+    >
+      <div class="row" style="margin-bottom:10px">
+        <el-switch v-model="diagWithTraceroute" active-text="同时跑 traceroute (10 跳)" />
+        <el-button :icon="Aim" type="primary" :loading="diagLoading" @click="runDiagnose">
+          重新诊断
+        </el-button>
+      </div>
+
+      <div v-if="diagResult" class="diag">
+        <el-alert
+          :type="diagSummaryType()"
+          show-icon
+          :closable="false"
+          :title="diagResult.summary?.title || ''"
+          :description="diagResult.summary?.detail || ''"
+          style="margin-bottom:12px"
+        />
+        <el-alert
+          v-if="diagResult.summary?.hint"
+          type="info"
+          show-icon
+          :closable="false"
+          :title="diagResult.summary.hint"
+          style="margin-bottom:12px"
+        />
+
+        <el-collapse v-model="diagCollapse" style="margin-top:10px">
+          <el-collapse-item title="① 路由查询 (ip route get)" name="route">
+            <div class="kv">
+              <div><b>cmd:</b> <code>{{ diagResult.route?.cmd }}</code></div>
+              <div><b>dev:</b> {{ diagResult.route?.parsed?.dev || '—' }}　<b>via:</b> {{ diagResult.route?.parsed?.via || '(直连)' }}　<b>src:</b> {{ diagResult.route?.parsed?.src || '—' }}</div>
+              <pre class="raw">{{ diagResult.route?.stdout || '(无输出)' }}</pre>
+              <pre v-if="diagResult.route?.stderr" class="raw err">{{ diagResult.route.stderr }}</pre>
+            </div>
+          </el-collapse-item>
+          <el-collapse-item title="② Ping 结果" name="ping">
+            <div class="kv">
+              <div><b>cmd:</b> <code>{{ diagResult.ping?.cmd }}</code></div>
+              <div>
+                <b>sent/recv:</b> {{ diagResult.ping?.packets_sent }} / {{ diagResult.ping?.packets_recv }}　
+                <b>loss:</b> {{ diagResult.ping?.loss_pct }}%　
+                <b>avg:</b> {{ diagResult.ping?.rtt_avg_ms ?? '—' }} ms　
+                <b>exit_code:</b> {{ diagResult.ping?.exit_code }}　
+                <b>diagnosis:</b> <code>{{ diagResult.ping?.diagnosis }}</code>
+              </div>
+              <pre class="raw">{{ diagResult.ping?.stdout || '(无输出)' }}</pre>
+              <pre v-if="diagResult.ping?.stderr" class="raw err">{{ diagResult.ping.stderr }}</pre>
+            </div>
+          </el-collapse-item>
+          <el-collapse-item v-if="diagResult.traceroute" title="③ Traceroute" name="trace">
+            <div class="kv">
+              <div><b>cmd:</b> <code>{{ diagResult.traceroute.cmd }}</code></div>
+              <pre class="raw">{{ diagResult.traceroute.stdout || '(无输出)' }}</pre>
+              <pre v-if="diagResult.traceroute.stderr" class="raw err">{{ diagResult.traceroute.stderr }}</pre>
+            </div>
+          </el-collapse-item>
+        </el-collapse>
+      </div>
+      <div v-else-if="diagLoading" style="text-align:center;padding:20px">诊断进行中…</div>
+
+      <template #footer>
+        <el-button @click="diagDlg = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <!-- ============ 接口流量编辑对话框 ============ -->
+    <el-dialog
+      v-model="ifMonDlg"
+      :title="ifMonEditingId ? '编辑接口流量监控' : '新增接口流量监控'"
+      width="500px"
+      destroy-on-close
+    >
+      <el-form label-width="110px">
+        <el-form-item label="接口" required>
+          <el-select
+            v-model="ifMonForm.interface_name"
+            filterable
+            allow-create
+            placeholder="选择系统接口"
+            style="width:100%"
+          >
+            <el-option
+              v-for="i in ifaces"
+              :key="i.ifname"
+              :label="`${i.ifname} (${i.kind})`"
+              :value="i.ifname"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="采样间隔(s)">
+          <el-input-number v-model="ifMonForm.interval_sec" :min="5" :max="3600" :step="5" />
+          <small class="muted" style="margin-left:8px">建议 15~60 秒，便于按分钟出图</small>
+        </el-form-item>
+        <el-form-item label="启用"><el-switch v-model="ifMonForm.enabled" /></el-form-item>
+        <el-form-item label="备注"><el-input v-model="ifMonForm.remark" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="ifMonDlg = false">取消</el-button>
+        <el-button type="primary" :loading="ifMonSaving" @click="saveIfMon">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.spacer { flex: 1; }
+.muted { color: var(--el-text-color-secondary); }
+.errlist { margin: 0; padding-left: 18px; font-size: 12px; }
+.diag .kv { display: flex; flex-direction: column; gap: 6px; font-size: 13px; }
+.diag .raw {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  background: var(--el-fill-color-light);
+  padding: 8px;
+  border-radius: 4px;
+  white-space: pre-wrap;
+  margin: 0;
+  max-height: 220px;
+  overflow: auto;
+}
+.diag .raw.err { background: var(--el-color-danger-light-9); color: var(--el-color-danger); }
+.diag code { background: var(--el-fill-color-light); padding: 0 4px; border-radius: 3px; }
+</style>
