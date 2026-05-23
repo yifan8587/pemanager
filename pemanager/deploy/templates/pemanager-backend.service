@@ -1,0 +1,35 @@
+[Unit]
+Description=PE Manager Backend (Gunicorn / Django)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+# 默认 root 运行：项目需要 netplan / wg-quick / ip / tc / nft / iptables 等系统命令。
+# 如需切换到非 root，请将 User=/Group= 改为 pemanager 并安装 sudoers fragment。
+User=root
+Group=root
+WorkingDirectory=__PEM_INSTALL_DIR__/backend
+EnvironmentFile=/etc/pemanager/pemanager.env
+# 通过 unix socket 接收 nginx 反代请求（避免端口冲突；性能更好）
+ExecStart=__PEM_INSTALL_DIR__/venv/bin/gunicorn \
+  --workers __PEM_GUNICORN_WORKERS__ \
+  --timeout 120 \
+  --access-logfile /var/log/pemanager/gunicorn-access.log \
+  --error-logfile /var/log/pemanager/gunicorn-error.log \
+  --bind unix:/run/pemanager/backend.sock \
+  config.wsgi:application
+
+RuntimeDirectory=pemanager
+RuntimeDirectoryMode=0755
+Restart=always
+RestartSec=3
+# Gunicorn worker 优雅退出
+KillMode=mixed
+TimeoutStopSec=10
+# 大数据响应/路由表预览时避免 EPIPE 中断
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

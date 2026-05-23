@@ -1,0 +1,23 @@
+2026-05-23 07:25:11.645 [info] 
+
+
+
+
+2026-05-23 07:25:11.665 [info] Extension host agent started.
+2026-05-23 07:25:11.725 [info] [<unknown>][39a0ee42][ManagementConnection] New connection established.
+2026-05-23 07:25:11.756 [info] [<unknown>][35c22e2e][ExtensionHostConnection] New connection established.
+2026-05-23 07:25:11.831 [info] Getting extensions control
+2026-05-23 07:25:11.861 [info] [<unknown>][35c22e2e][ExtensionHostConnection] <220441> Launched Extension Host Process.
+2026-05-23 07:25:13.415 [warning] RequestStore#acceptReply was called without receiving a matching request 37
+2026-05-23 07:25:13.416 [warning] RequestStore#acceptReply was called without receiving a matching request 38
+2026-05-23 07:25:13.417 [warning] RequestStore#acceptReply was called without receiving a matching request 39
+2026-05-23 07:25:13.417 [warning] RequestStore#acceptReply was called without receiving a matching request 40
+2026-05-23 07:25:13.418 [warning] RequestStore#acceptReply was called without receiving a matching request 41
+2026-05-23 07:25:13.418 [warning] RequestStore#acceptReply was called without receiving a matching request 42
+2026-05-23 07:25:13.419 [warning] RequestStore#acceptReply was called without receiving a matching request 43
+2026-05-23 07:25:13.419 [warning] RequestStore#acceptReply was called without receiving a matching request 44
+2026-05-23 07:25:13.420 [warning] RequestStore#acceptReply was called without receiving a matching request 45
+2026-05-23 07:25:13.420 [warning] RequestStore#acceptReply was called without receiving a matching request 46
+2026-05-23 07:25:13.420 [warning] RequestStore#acceptReply was called without receiving a matching request 47
+2026-05-23 07:25:13.421 [warning] RequestStore#acceptReply was called without receiving a matching request 48
+2026-05-23 07:25:24.924 [info] [CursorProclistService] Config enabled feature (subsample every 10s)

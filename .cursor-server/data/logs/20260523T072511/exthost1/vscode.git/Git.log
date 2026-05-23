@@ -1,0 +1,69 @@
+2026-05-23 07:25:19.653 [info] [main] 日志级别: Info
+2026-05-23 07:25:19.653 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-23 07:25:19.683 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-23 07:25:19.683 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-23 07:25:21.606 [info] > git rev-parse --show-toplevel [1882ms] (getRepositoryRoot)
+2026-05-23 07:25:21.906 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [32ms] 
+2026-05-23 07:25:21.932 [info] [Model][openRepository] Opened repository: /root
+2026-05-23 07:25:21.932 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-23 07:25:22.069 [info] > git rev-parse --show-toplevel [91ms] (getRepositoryRoot)
+2026-05-23 07:25:22.070 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-23 07:25:22.071 [info] > git config --get commit.template [105ms] 
+2026-05-23 07:25:22.157 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [21ms] 
+2026-05-23 07:25:22.527 [info] > git show --textconv :pemanager/deploy/API.md [70ms]
+2026-05-23 07:25:22.528 [info] > git ls-files --stage -- pemanager/deploy/API.md [50ms] 
+2026-05-23 07:25:22.546 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [107ms] 
+2026-05-23 07:25:22.575 [info] > git hash-object -t tree /dev/null [30ms] 
+2026-05-23 07:25:22.576 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/deploy/API.md.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fdeploy%2FAPI.md%22%2C%22ref%22%3A%22%22%7D
+2026-05-23 07:25:22.577 [info] > git hash-object -t tree /dev/null [39ms] 
+2026-05-23 07:25:22.577 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/deploy/API.md.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fdeploy%2FAPI.md%22%2C%22ref%22%3A%22%22%7D
+2026-05-23 07:25:23.466 [info] > git status -z -uall [1038ms]
+2026-05-23 07:25:23.467 [info] > git check-ignore -v -z --stdin [910ms]
+2026-05-23 07:25:23.516 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [16ms] 
+2026-05-23 07:25:24.658 [info] > git config --get --local branch.main.vscode-merge-base [1135ms] 
+2026-05-23 07:25:24.658 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-23 07:25:24.674 [info] > git config --get commit.template [1163ms] 
+2026-05-23 07:25:24.752 [info] > git reflog main --grep-reflog=branch: Created from *. [78ms] 
+2026-05-23 07:25:24.774 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [47ms] 
+2026-05-23 07:25:24.783 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [22ms] 
+2026-05-23 07:25:24.783 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-23 07:25:24.783 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-23 07:25:25.660 [info] > git merge-base refs/heads/main refs/remotes/origin/main [866ms] 
+2026-05-23 07:25:25.881 [info] > git diff --name-status -z --diff-filter=ADMR fa85d731dc8493d3c8eff21e0420f29d325ecf4e...refs/remotes/origin/main [211ms] 
+2026-05-23 07:25:25.892 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [19ms] 
+2026-05-23 07:25:26.561 [info] > git status -z -uall [695ms]
+2026-05-23 07:25:29.679 [info] > git config --global user.name [2ms] 
+2026-05-23 07:25:29.689 [info] > git config --global user.email [2ms] 
+2026-05-23 07:25:29.689 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-23 07:26:29.038 [info] > git config --get commit.template [2ms] 
+2026-05-23 07:26:29.052 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [8ms] 
+2026-05-23 07:26:29.075 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [4ms] 
+2026-05-23 07:26:29.585 [info] > git status -z -uall [523ms]
+2026-05-23 07:26:34.620 [info] > git config --get commit.template [2ms] 
+2026-05-23 07:26:34.628 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3ms] 
+2026-05-23 07:26:34.644 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [3ms] 
+2026-05-23 07:26:35.140 [info] > git status -z -uall [506ms]
+2026-05-23 07:26:40.183 [info] > git config --get commit.template [2ms] 
+2026-05-23 07:26:40.191 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms] 
+2026-05-23 07:26:40.211 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-05-23 07:26:40.696 [info] > git status -z -uall [497ms]
+2026-05-23 07:26:45.735 [info] > git config --get commit.template [8ms] 
+2026-05-23 07:26:45.735 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms] 
+2026-05-23 07:26:45.753 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [3ms] 
+2026-05-23 07:26:46.262 [info] > git status -z -uall [520ms]
+2026-05-23 07:27:47.637 [info] > git config --get commit.template [7ms] 
+2026-05-23 07:27:47.638 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms] 
+2026-05-23 07:27:47.655 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [3ms] 
+2026-05-23 07:27:48.152 [info] > git status -z -uall [507ms]
+2026-05-23 07:27:53.189 [info] > git config --get commit.template [2ms] 
+2026-05-23 07:27:53.197 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3ms] 
+2026-05-23 07:27:53.214 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-05-23 07:27:53.713 [info] > git status -z -uall [509ms]
+2026-05-23 07:27:58.753 [info] > git config --get commit.template [7ms] 
+2026-05-23 07:27:58.753 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms] 
+2026-05-23 07:27:58.771 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-05-23 07:27:59.282 [info] > git status -z -uall [522ms]
+2026-05-23 07:28:04.318 [info] > git config --get commit.template [3ms] 
+2026-05-23 07:28:04.327 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms] 
+2026-05-23 07:28:04.343 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-05-23 07:28:04.837 [info] > git status -z -uall [503ms]

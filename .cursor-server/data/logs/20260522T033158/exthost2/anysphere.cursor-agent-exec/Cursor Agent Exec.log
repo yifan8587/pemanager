@@ -1,0 +1,15 @@
+2026-05-22 09:56:31.684 [info] rg_diagnostics.startup {"rgPath":"/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/node_modules/@vscode/ripgrep/bin/rg","rgPathExists":true,"rgParentDirExists":true,"platform":"linux","arch":"x64","nodeVersion":"v20.18.2","extensionPath":"/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/extensions/cursor-agent-exec","execPath":"/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/node","remoteName":"ssh-remote","uiKind":"desktop","rgFileSize":5396392,"rgFileMode":"100755","rgIsFile":true,"parentDirContents":["rg"],"grandparentDirExists":true,"grandparentDirContents":["LICENSE","SECURITY.md","bin","build","jsconfig.json","lib","node_modules","package.json"]}
+2026-05-22 09:56:31.684 [info] cursor_agent_exec.startup.workspace_paths {"workspacePathCount":1,"workspacePaths":["/root"]}
+2026-05-22 09:56:32.283 [info] cursor_agent_exec.startup.activation_latency {"durationMs":2496}
+2026-05-22 09:56:34.358 [info] CursorPluginsAgentSkillsService load completed {"durationMs":2386,"ruleCount":0,"skillCount":0}
+2026-05-22 09:56:34.408 [info] managed_skills.removed {"skill_id":"clone","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:34.427 [info] LocalCursorRulesService load completed {"durationMs":2463,"ruleCount":0}
+2026-05-22 09:56:34.484 [info] managed_skills.removed {"skill_id":"automate","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:37.417 [info] managed_skills.removed {"skill_id":"cursor","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:37.452 [info] managed_skills.removed {"skill_id":"cursor-blame","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:38.553 [info] managed_skills.removed {"skill_id":"cursor-sdk","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:38.559 [info] managed_skills.removed {"skill_id":"loop","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:38.869 [info] managed_skills.removed {"skill_id":"onboard","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:38.871 [info] managed_skills.removed {"skill_id":"cursor-review-links","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-22 09:56:39.070 [info] AgentSkillsCursorRulesService load completed {"durationMs":7101,"ruleCount":12,"skillCount":12}
+2026-05-22 09:56:39.072 [info] cursorRulesService.getAllCursorRules

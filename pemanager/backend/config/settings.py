@@ -17,16 +17,24 @@ import os
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 
-# Quick-start development settings - unsuitable for production
-# See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
+def _envbool(name: str, default: str = '0') -> bool:
+    return os.environ.get(name, default).strip().lower() in ('1', 'true', 'yes', 'on')
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = 'django-insecure-@ue#(zfk4dz(l97ta400*jz7fl*h!e1!e$*!uu!%@766i&7)t%'
 
-# SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+# 优先读环境变量，未设置时回落到开发默认值；生产部署请在
+# /etc/pemanager/pemanager.env 中配置 DJANGO_SECRET_KEY / DJANGO_DEBUG / DJANGO_ALLOWED_HOSTS。
+SECRET_KEY = os.environ.get(
+    'DJANGO_SECRET_KEY',
+    'django-insecure-@ue#(zfk4dz(l97ta400*jz7fl*h!e1!e$*!uu!%@766i&7)t%',
+)
 
-ALLOWED_HOSTS = ['*']
+DEBUG = _envbool('DJANGO_DEBUG', '1')
+
+_allowed_env = os.environ.get('DJANGO_ALLOWED_HOSTS', '').strip()
+if _allowed_env:
+    ALLOWED_HOSTS = [h.strip() for h in _allowed_env.split(',') if h.strip()]
+else:
+    ALLOWED_HOSTS = ['*']
 
 
 # Application definition
@@ -89,10 +97,11 @@ WSGI_APPLICATION = 'config.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
+_db_path = os.environ.get('DJANGO_DB_PATH', '').strip()
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': BASE_DIR / 'db.sqlite3',
+        'NAME': Path(_db_path) if _db_path else (BASE_DIR / 'db.sqlite3'),
     }
 }
 
@@ -132,6 +141,8 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
 STATIC_URL = 'static/'
+# collectstatic 输出目录；生产部署时 nginx 反代该目录
+STATIC_ROOT = Path(os.environ.get('DJANGO_STATIC_ROOT', '').strip()) if os.environ.get('DJANGO_STATIC_ROOT', '').strip() else (BASE_DIR / 'staticfiles')
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field

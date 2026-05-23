@@ -108,8 +108,9 @@ http.interceptors.response.use(
         || /\/api\/accountmanage\/auth\/(login|refresh)\//.test(config.url || '')
       ) {
         auth.clear()
+        try { localStorage.setItem('pem.logoutAt', `${Date.now()}:expired`) } catch { /* ignore */ }
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-          window.location.assign('/login')
+          window.location.assign('/login?reason=expired')
         }
         throw error
       }
@@ -130,8 +131,9 @@ http.interceptors.response.use(
       } catch (e) {
         _drainPending(e, null)
         auth.clear()
+        try { localStorage.setItem('pem.logoutAt', `${Date.now()}:expired`) } catch { /* ignore */ }
         if (typeof window !== 'undefined' && !window.location.pathname.startsWith('/login')) {
-          window.location.assign('/login')
+          window.location.assign('/login?reason=expired')
         }
         throw e
       } finally {

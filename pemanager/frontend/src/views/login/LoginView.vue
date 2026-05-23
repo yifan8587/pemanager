@@ -1,15 +1,26 @@
 <script setup>
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { ChromeFilled, User, Lock } from '@element-plus/icons-vue'
 import { accountApi } from '../../api/accountApi'
+import { markActivity } from '../../utils/idleTimeout'
 
 const router = useRouter()
 const route = useRoute()
 
 const form = ref({ username: '', password: '' })
 const loading = ref(false)
+
+// 进入登录页时若是因"闲置超时 / 被踢出"跳进来的，给出明显提示
+onMounted(() => {
+  const reason = route.query.reason
+  if (reason === 'idle') {
+    ElMessage.warning('由于长时间未操作，您已被自动退出，请重新登录')
+  } else if (reason === 'manual') {
+    ElMessage.info('已退出登录')
+  }
+})
 
 async function doLogin() {
   if (!form.value.username || !form.value.password) {
@@ -20,6 +31,8 @@ async function doLogin() {
   try {
     const r = await accountApi.login(form.value)
     ElMessage.success(`欢迎，${r.user?.username || ''}`)
+    // 重置闲置计时，避免刚登录就因历史 lastActivity 被立刻踢出
+    markActivity(true)
     const next = route.query.next || '/'
     router.replace(typeof next === 'string' ? next : '/')
   } catch (e) {

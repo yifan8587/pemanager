@@ -250,3 +250,16 @@ source pemanager/venv/bin/activate
 python pemanager/backend/manage.py runserver 0.0.0.0:8000
 cd pemanager/frontend/
 npm run dev
+git commit -m "pemanagerV1.0"
+git add .
+git commit -m "pemanagerV1.0"
+history 
+git push origin main
+source pemanager/venv/bin/activate
+python pemanager/backend/manage.py runserver 0.0.0.0:8000
+git status
+git commit -a
+history | grep git
+git commit -m "pemanagerV1.0"
+cd pemanager/frontend/
+npm run dev

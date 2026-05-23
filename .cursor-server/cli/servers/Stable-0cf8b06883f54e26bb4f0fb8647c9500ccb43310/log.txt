@@ -1,94 +1,37 @@
-Server bound to /tmp/cursor-fee487c5-5cb4-440a-a697-0aa7884a6862
-Extension host agent listening on /tmp/cursor-fee487c5-5cb4-440a-a697-0aa7884a6862
+Server bound to /tmp/cursor-106af0fc-6746-4880-9514-a513a84d98b8
+Extension host agent listening on /tmp/cursor-106af0fc-6746-4880-9514-a513a84d98b8
 
-[03:31:58] 
-
-
+[07:25:11] 
 
 
-[03:31:58] Extension host agent started.
-[03:31:58] [<unknown>][9e6949c3][ManagementConnection] New connection established.
-[03:31:58] [<unknown>][1dcd202c][ExtensionHostConnection] New connection established.
-[03:31:58] Getting extensions control
-[03:31:58] [<unknown>][1dcd202c][ExtensionHostConnection] <166704> Launched Extension Host Process.
-[03:31:58] [<unknown>][1dcd202c][ExtensionHostConnection] <166704><stderr> Error reading NLS messages file /root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json: Error: ENOENT: no such file or directory, open '/root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json'
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 37
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 38
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 39
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 40
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 41
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 42
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 43
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 44
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 45
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 46
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 47
-[03:32:00] RequestStore#acceptReply was called without receiving a matching request 48
-rejected promise not handled within 1 second: CodeExpectedError: Could not find pty 4 on pty host
-stack trace: CodeExpectedError: Could not find pty 4 on pty host
-    at M._throwIfNoPty (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:7436)
-    at M.resize (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:3421)
-    at R.r.<computed> (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:46:3386)
-    at Object.call (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:28:5408)
-    at bc.onPromise (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:92017)
-    at bc.onRawMessage (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91432)
-    at gr.value (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:90535)
-    at b._deliver (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:2937)
-    at b.fire (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:3257)
-    at process.w (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:24:24873)
-    at process.emit (node:events:518:28)
-    at emit (node:internal/child_process:950:14)
-    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
-[03:32:01] Error [CodeExpectedError]: Could not find pty 4 on pty host
-    at M._throwIfNoPty (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:7436)
-    at M.resize (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:3421)
-    at R.r.<computed> (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:46:3386)
-    at Object.call (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:28:5408)
-    at bc.onPromise (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:92017)
-    at bc.onRawMessage (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91432)
-    at gr.value (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:90535)
-    at b._deliver (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:2937)
-    at b.fire (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:3257)
-    at process.w (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:24:24873)
-    at process.emit (node:events:518:28)
-    at emit (node:internal/child_process:950:14)
-    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
-[03:32:12] [CursorProclistService] Config enabled feature (subsample every 10s)
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 49
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 50
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 51
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 52
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 53
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 54
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 55
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 56
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 57
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 58
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 59
-[03:32:17] RequestStore#acceptReply was called without receiving a matching request 60
-New EH opened, aborting shutdown
-[03:36:58] New EH opened, aborting shutdown
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 61
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 62
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 63
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 64
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 65
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 66
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 67
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 68
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 69
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 70
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 71
-[03:55:56] RequestStore#acceptReply was called without receiving a matching request 72
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 73
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 74
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 75
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 76
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 77
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 78
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 79
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 80
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 81
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 82
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 83
-[06:14:04] RequestStore#acceptReply was called without receiving a matching request 84
+
+
+[07:25:11] Extension host agent started.
+[07:25:11] [<unknown>][39a0ee42][ManagementConnection] New connection established.
+[07:25:11] [<unknown>][35c22e2e][ExtensionHostConnection] New connection established.
+Generating translation files failed. Error: ENOENT: no such file or directory, open '/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/nls.keys.json'
+    at async open (node:internal/fs/promises:641:25)
+    at async Object.readFile (node:internal/fs/promises:1258:14)
+    at async Vy (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:3:16877)
+    at async I6 (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:75:65237)
+    at async Kh.start (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:75:69876) {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/nls.keys.json'
+}
+[07:25:11] Getting extensions control
+[07:25:11] [<unknown>][35c22e2e][ExtensionHostConnection] <220441> Launched Extension Host Process.
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 37
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 38
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 39
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 40
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 41
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 42
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 43
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 44
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 45
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 46
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 47
+[07:25:13] RequestStore#acceptReply was called without receiving a matching request 48
+[07:25:24] [CursorProclistService] Config enabled feature (subsample every 10s)

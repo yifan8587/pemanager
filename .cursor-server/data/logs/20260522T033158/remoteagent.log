@@ -73,3 +73,85 @@
 2026-05-22 06:14:04.776 [warning] RequestStore#acceptReply was called without receiving a matching request 82
 2026-05-22 06:14:04.776 [warning] RequestStore#acceptReply was called without receiving a matching request 83
 2026-05-22 06:14:04.777 [warning] RequestStore#acceptReply was called without receiving a matching request 84
+2026-05-22 06:23:05.030 [warning] RequestStore#acceptReply was called without receiving a matching request 85
+2026-05-22 06:23:05.031 [warning] RequestStore#acceptReply was called without receiving a matching request 86
+2026-05-22 06:23:05.031 [warning] RequestStore#acceptReply was called without receiving a matching request 87
+2026-05-22 06:23:05.031 [warning] RequestStore#acceptReply was called without receiving a matching request 88
+2026-05-22 06:23:05.031 [warning] RequestStore#acceptReply was called without receiving a matching request 89
+2026-05-22 06:23:05.032 [warning] RequestStore#acceptReply was called without receiving a matching request 90
+2026-05-22 06:23:05.032 [warning] RequestStore#acceptReply was called without receiving a matching request 91
+2026-05-22 06:23:05.032 [warning] RequestStore#acceptReply was called without receiving a matching request 92
+2026-05-22 06:23:05.032 [warning] RequestStore#acceptReply was called without receiving a matching request 93
+2026-05-22 06:23:05.033 [warning] RequestStore#acceptReply was called without receiving a matching request 94
+2026-05-22 06:23:05.033 [warning] RequestStore#acceptReply was called without receiving a matching request 95
+2026-05-22 06:23:05.033 [warning] RequestStore#acceptReply was called without receiving a matching request 96
+2026-05-22 09:30:43.056 [info] [<unknown>][9e6949c3][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...
+2026-05-22 09:56:21.933 [info] [<unknown>][9e6949c3][ManagementConnection] Another client has connected, will shorten the wait for reconnection 5m before disposing...
+2026-05-22 09:56:21.937 [info] [<unknown>][9f59b1e5][ExtensionHostConnection] New connection established.
+2026-05-22 09:56:21.938 [info] [<unknown>][2408b94b][ManagementConnection] New connection established.
+2026-05-22 09:56:21.947 [info] [<unknown>][9f59b1e5][ExtensionHostConnection] <188751> Launched Extension Host Process.
+2026-05-22 09:56:21.952 [error] Error: Unexpected SIGPIPE
+    at process.<anonymous> (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:179:1092)
+    at process.emit (node:events:530:35)
+2026-05-22 09:56:22.009 [info] Getting extensions control
+2026-05-22 09:56:22.026 [info] [<unknown>][9f59b1e5][ExtensionHostConnection] <188751><stderr> Error reading NLS messages file /root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json: Error: ENOENT: no such file or directory, open '/root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json'
+2026-05-22 09:56:25.074 [error] CodeExpectedError: Could not find pty 12 on pty host
+    at M._throwIfNoPty (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:7436)
+    at M.resize (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:3421)
+    at R.r.<computed> (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:46:3386)
+    at Object.call (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:28:5408)
+    at bc.onPromise (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:92017)
+    at bc.onRawMessage (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91432)
+    at gr.value (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:90535)
+    at b._deliver (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:2937)
+    at b.fire (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:3257)
+    at process.w (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:24:24873)
+    at process.emit (node:events:518:28)
+    at emit (node:internal/child_process:950:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+2026-05-22 09:56:25.075 [error] CodeExpectedError: Could not find pty 12 on pty host
+    at M._throwIfNoPty (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:7436)
+    at M.resize (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:47:3421)
+    at R.r.<computed> (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:46:3386)
+    at Object.call (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:28:5408)
+    at bc.onPromise (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:92017)
+    at bc.onRawMessage (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:91432)
+    at gr.value (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:90535)
+    at b._deliver (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:2937)
+    at b.fire (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:26:3257)
+    at process.w (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/platform/terminal/node/ptyHostMain.js:24:24873)
+    at process.emit (node:events:518:28)
+    at emit (node:internal/child_process:950:14)
+    at process.processTicksAndRejections (node:internal/process/task_queues:83:21)
+2026-05-22 09:56:26.262 [warning] RequestStore#acceptReply was called without receiving a matching request 169
+2026-05-22 09:56:26.263 [warning] RequestStore#acceptReply was called without receiving a matching request 170
+2026-05-22 09:56:26.263 [warning] RequestStore#acceptReply was called without receiving a matching request 171
+2026-05-22 09:56:26.264 [warning] RequestStore#acceptReply was called without receiving a matching request 172
+2026-05-22 09:56:26.264 [warning] RequestStore#acceptReply was called without receiving a matching request 173
+2026-05-22 09:56:26.264 [warning] RequestStore#acceptReply was called without receiving a matching request 174
+2026-05-22 09:56:26.265 [warning] RequestStore#acceptReply was called without receiving a matching request 175
+2026-05-22 09:56:26.265 [warning] RequestStore#acceptReply was called without receiving a matching request 176
+2026-05-22 09:56:26.266 [warning] RequestStore#acceptReply was called without receiving a matching request 177
+2026-05-22 09:56:26.266 [warning] RequestStore#acceptReply was called without receiving a matching request 178
+2026-05-22 09:56:26.266 [warning] RequestStore#acceptReply was called without receiving a matching request 179
+2026-05-22 09:56:26.267 [warning] RequestStore#acceptReply was called without receiving a matching request 180
+2026-05-22 09:56:28.094 [warning] RequestStore#acceptReply was called without receiving a matching request 181
+2026-05-22 09:56:28.095 [warning] RequestStore#acceptReply was called without receiving a matching request 182
+2026-05-22 09:56:28.095 [warning] RequestStore#acceptReply was called without receiving a matching request 183
+2026-05-22 09:56:28.095 [warning] RequestStore#acceptReply was called without receiving a matching request 184
+2026-05-22 09:56:28.096 [warning] RequestStore#acceptReply was called without receiving a matching request 185
+2026-05-22 09:56:28.096 [warning] RequestStore#acceptReply was called without receiving a matching request 186
+2026-05-22 09:56:28.096 [warning] RequestStore#acceptReply was called without receiving a matching request 187
+2026-05-22 09:56:28.096 [warning] RequestStore#acceptReply was called without receiving a matching request 188
+2026-05-22 09:56:28.096 [warning] RequestStore#acceptReply was called without receiving a matching request 189
+2026-05-22 09:56:28.097 [warning] RequestStore#acceptReply was called without receiving a matching request 190
+2026-05-22 09:56:28.097 [warning] RequestStore#acceptReply was called without receiving a matching request 191
+2026-05-22 09:56:28.097 [warning] RequestStore#acceptReply was called without receiving a matching request 192
+2026-05-22 09:56:35.863 [info] [CursorProclistService] Config enabled feature (subsample every 10s)
+2026-05-22 10:01:22.068 [info] [<unknown>][9e6949c3][ManagementConnection] The reconnection short grace time of 5m has expired, so the connection will be disposed.
+2026-05-22 10:01:22.196 [info] [<unknown>][1dcd202c][ExtensionHostConnection] <166704> Extension Host Process exited with code: 0, signal: null.
+2026-05-22 10:25:22.636 [info] [<unknown>][2408b94b][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...
+2026-05-22 13:24:54.986 [info] [<unknown>][9f59b1e5][ExtensionHostConnection] <188751> Extension Host Process exited with code: 0, signal: null.
+2026-05-22 13:24:54.987 [info] Last EH closed, waiting before shutting down
+2026-05-22 13:25:27.121 [info] [<unknown>][2408b94b][ManagementConnection] The reconnection grace time of 3h has expired, so the connection will be disposed.
+2026-05-22 13:29:54.990 [info] Last EH closed, shutting down

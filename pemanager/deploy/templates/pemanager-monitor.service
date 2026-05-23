@@ -1,0 +1,19 @@
+[Unit]
+Description=PE Manager Monitor Loop (ping/mtr/interface traffic)
+After=network-online.target pemanager-backend.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=__PEM_INSTALL_DIR__/backend
+EnvironmentFile=/etc/pemanager/pemanager.env
+ExecStart=__PEM_INSTALL_DIR__/venv/bin/python manage.py monitor_loop
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -112,7 +112,9 @@ function reload() { window.location.reload() }
 
 async function logout() {
   await accountApi.logout()
-  router.replace('/login')
+  // 广播给其他标签页：一起退出
+  try { localStorage.setItem('pem.logoutAt', `${Date.now()}:manual`) } catch { /* ignore */ }
+  router.replace('/login?reason=manual')
 }
 
 const isLogin = computed(() => route.path.startsWith('/login'))

@@ -1,0 +1,39 @@
+2026-05-22 09:56:32.424 [info] [main] 日志级别: Info
+2026-05-22 09:56:32.425 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-22 09:56:32.425 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-22 09:56:32.425 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-22 09:56:32.502 [info] > git rev-parse --show-toplevel [69ms] (getRepositoryRoot)
+2026-05-22 09:56:33.460 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [947ms] 
+2026-05-22 09:56:33.479 [info] [Model][openRepository] Opened repository: /root
+2026-05-22 09:56:33.479 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-22 09:56:34.404 [info] > git rev-parse --show-toplevel [58ms] (getRepositoryRoot)
+2026-05-22 09:56:34.405 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-22 09:56:34.407 [info] > git config --get commit.template [69ms] 
+2026-05-22 09:56:34.494 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [55ms] 
+2026-05-22 09:56:34.709 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [105ms] 
+2026-05-22 09:56:35.153 [info] > git show --textconv :pemanager/deploy/deploy.md [56ms]
+2026-05-22 09:56:35.172 [info] > git ls-files --stage -- pemanager/deploy/deploy.md [66ms] 
+2026-05-22 09:56:35.215 [info] > git status -z -uall [621ms]
+2026-05-22 09:56:35.215 [info] > git hash-object -t tree /dev/null [19ms] 
+2026-05-22 09:56:35.216 [warning] [GitFileSystemProvider][readFile] File not found - git:/root/pemanager/deploy/deploy.md.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fdeploy%2Fdeploy.md%22%2C%22ref%22%3A%22%22%7D
+2026-05-22 09:56:35.217 [info] > git hash-object -t tree /dev/null [33ms] 
+2026-05-22 09:56:35.217 [warning] [GitFileSystemProvider][stat] File not found - git:/root/pemanager/deploy/deploy.md.git?%7B%22path%22%3A%22%2Froot%2Fpemanager%2Fdeploy%2Fdeploy.md%22%2C%22ref%22%3A%22%22%7D
+2026-05-22 09:56:35.283 [info] > git check-ignore -v -z --stdin [207ms]
+2026-05-22 09:56:35.285 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [31ms] 
+2026-05-22 09:56:35.305 [info] > git config --get commit.template [41ms] 
+2026-05-22 09:56:36.234 [info] > git config --get --local branch.main.vscode-merge-base [941ms] 
+2026-05-22 09:56:36.234 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-22 09:56:37.119 [info] > git reflog main --grep-reflog=branch: Created from *. [874ms] 
+2026-05-22 09:56:37.139 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [12ms] 
+2026-05-22 09:56:37.139 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-22 09:56:37.139 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-22 09:56:37.149 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [56ms] 
+2026-05-22 09:56:37.173 [info] > git merge-base refs/heads/main refs/remotes/origin/main [25ms] 
+2026-05-22 09:56:37.414 [info] > git diff --name-status -z --diff-filter=ADMR fa85d731dc8493d3c8eff21e0420f29d325ecf4e...refs/remotes/origin/main [233ms] 
+2026-05-22 09:56:37.415 [info] > git blame --root --incremental fa85d731dc8493d3c8eff21e0420f29d325ecf4e -- pemanager/deploy/deploy.md [253ms] 
+2026-05-22 09:56:37.415 [info] fatal: no such path pemanager/deploy/deploy.md in fa85d731dc8493d3c8eff21e0420f29d325ecf4e
+2026-05-22 09:56:37.470 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [27ms] 
+2026-05-22 09:56:38.540 [info] > git status -z -uall [1107ms]
+2026-05-22 09:56:42.347 [info] > git config --global user.name [2ms] 
+2026-05-22 09:56:42.356 [info] > git config --global user.email [2ms] 
+2026-05-22 09:56:42.356 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
