@@ -77,3 +77,5 @@
 2026-05-23 16:30:00.164 [info] Extension activated success: vscode.json-language-features — 420ms (code loading: 198ms, activate call: 0ms, activate resolved: 222ms)
 2026-05-23 16:30:03.909 [warning] [Decorations] CAPPING events from decorations provider vscode.git 552
 2026-05-23 16:32:42.617 [warning] [Decorations] CAPPING events from decorations provider vscode.git 498
+2026-05-23 16:32:46.451 [warning] [Decorations] CAPPING events from decorations provider vscode.git 498
+2026-05-23 16:32:53.829 [warning] [Decorations] CAPPING events from decorations provider vscode.git 258
