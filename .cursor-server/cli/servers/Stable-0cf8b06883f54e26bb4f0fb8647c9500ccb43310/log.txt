@@ -1,87 +1,75 @@
-Server bound to /tmp/cursor-106af0fc-6746-4880-9514-a513a84d98b8
-Extension host agent listening on /tmp/cursor-106af0fc-6746-4880-9514-a513a84d98b8
+Server bound to /tmp/cursor-f62bfdaa-4ba6-4b33-a9b4-9ecce6c87cbf
+Extension host agent listening on /tmp/cursor-f62bfdaa-4ba6-4b33-a9b4-9ecce6c87cbf
 
-[07:25:11] 
-
-
+[16:29:31] 
 
 
-[07:25:11] Extension host agent started.
-[07:25:11] [<unknown>][39a0ee42][ManagementConnection] New connection established.
-[07:25:11] [<unknown>][35c22e2e][ExtensionHostConnection] New connection established.
-Generating translation files failed. Error: ENOENT: no such file or directory, open '/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/nls.keys.json'
-    at async open (node:internal/fs/promises:641:25)
-    at async Object.readFile (node:internal/fs/promises:1258:14)
-    at async Vy (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:3:16877)
-    at async I6 (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:75:65237)
-    at async Kh.start (file:///root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/server-main.js:75:69876) {
-  errno: -2,
-  code: 'ENOENT',
-  syscall: 'open',
-  path: '/root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/nls.keys.json'
-}
-[07:25:11] Getting extensions control
-[07:25:11] [<unknown>][35c22e2e][ExtensionHostConnection] <220441> Launched Extension Host Process.
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 37
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 38
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 39
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 40
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 41
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 42
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 43
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 44
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 45
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 46
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 47
-[07:25:13] RequestStore#acceptReply was called without receiving a matching request 48
-[07:25:24] [CursorProclistService] Config enabled feature (subsample every 10s)
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 49
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 50
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 51
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 52
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 53
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 54
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 55
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 56
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 57
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 58
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 59
-[07:30:10] RequestStore#acceptReply was called without receiving a matching request 60
-New EH opened, aborting shutdown
-[07:30:11] New EH opened, aborting shutdown
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 61
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 62
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 63
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 64
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 65
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 66
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 67
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 68
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 69
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 70
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 71
-[07:38:50] RequestStore#acceptReply was called without receiving a matching request 72
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 73
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 74
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 75
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 76
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 77
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 78
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 79
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 80
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 81
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 82
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 83
-[07:40:00] RequestStore#acceptReply was called without receiving a matching request 84
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 85
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 86
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 87
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 88
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 89
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 90
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 91
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 92
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 93
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 94
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 95
-[07:45:09] RequestStore#acceptReply was called without receiving a matching request 96
+
+
+[16:29:31] Extension host agent started.
+[16:29:31] [<unknown>][b3ab2e73][ManagementConnection] New connection established.
+[16:29:31] [<unknown>][7277d7e9][ExtensionHostConnection] New connection established.
+[16:29:31] Getting extensions control
+[16:29:31] [<unknown>][7277d7e9][ExtensionHostConnection] <265799> Launched Extension Host Process.
+[16:29:31] [<unknown>][7277d7e9][ExtensionHostConnection] <265799><stderr> Error reading NLS messages file /root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json: Error: ENOENT: no such file or directory, open '/root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json'
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 1
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 2
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 3
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 4
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 5
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 6
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 7
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 8
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 9
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 10
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 11
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 12
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 13
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 14
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 15
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 16
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 17
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 18
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 19
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 20
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 21
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 22
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 23
+[16:29:31] RequestStore#acceptReply was called without receiving a matching request 24
+[16:29:32] [CursorProclistService] Config enabled feature (subsample every 10s)
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 25
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 26
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 27
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 28
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 29
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 30
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 31
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 32
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 33
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 34
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 35
+[16:29:32] RequestStore#acceptReply was called without receiving a matching request 36
+[16:29:34] [<unknown>][b3ab2e73][ManagementConnection] The client has disconnected gracefully, so the connection will be disposed.
+[16:29:35] [<unknown>][7277d7e9][ExtensionHostConnection] <265799> Extension Host Process exited with code: 0, signal: null.
+Cancelling previous shutdown timeout
+[16:29:35] Cancelling previous shutdown timeout
+Last EH closed, waiting before shutting down
+[16:29:35] Last EH closed, waiting before shutting down
+[16:29:38] [<unknown>][2dbb8978][ExtensionHostConnection] New connection established.
+[16:29:38] [<unknown>][4468576e][ManagementConnection] New connection established.
+[16:29:38] [<unknown>][2dbb8978][ExtensionHostConnection] <265905> Launched Extension Host Process.
+[16:29:38] [<unknown>][2dbb8978][ExtensionHostConnection] <265905><stderr> Error reading NLS messages file /root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json: Error: ENOENT: no such file or directory, open '/root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json'
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 61
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 62
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 63
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 64
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 65
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 66
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 67
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 68
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 69
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 70
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 71
+[16:29:40] RequestStore#acceptReply was called without receiving a matching request 72
+[16:29:41] [File Watcher] Unexpected error: inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory (EUNKNOWN) (path: /root)
+[16:29:41] [File Watcher (universal)] inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory

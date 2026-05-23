@@ -1,0 +1,70 @@
+2026-05-23 16:29:31.170 [info] 
+
+
+
+
+2026-05-23 16:29:31.189 [info] Extension host agent started.
+2026-05-23 16:29:31.260 [info] [<unknown>][b3ab2e73][ManagementConnection] New connection established.
+2026-05-23 16:29:31.277 [info] [<unknown>][7277d7e9][ExtensionHostConnection] New connection established.
+2026-05-23 16:29:31.360 [info] Getting extensions control
+2026-05-23 16:29:31.377 [info] [<unknown>][7277d7e9][ExtensionHostConnection] <265799> Launched Extension Host Process.
+2026-05-23 16:29:31.446 [info] [<unknown>][7277d7e9][ExtensionHostConnection] <265799><stderr> Error reading NLS messages file /root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json: Error: ENOENT: no such file or directory, open '/root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json'
+2026-05-23 16:29:31.536 [warning] RequestStore#acceptReply was called without receiving a matching request 1
+2026-05-23 16:29:31.537 [warning] RequestStore#acceptReply was called without receiving a matching request 2
+2026-05-23 16:29:31.537 [warning] RequestStore#acceptReply was called without receiving a matching request 3
+2026-05-23 16:29:31.537 [warning] RequestStore#acceptReply was called without receiving a matching request 4
+2026-05-23 16:29:31.538 [warning] RequestStore#acceptReply was called without receiving a matching request 5
+2026-05-23 16:29:31.538 [warning] RequestStore#acceptReply was called without receiving a matching request 6
+2026-05-23 16:29:31.538 [warning] RequestStore#acceptReply was called without receiving a matching request 7
+2026-05-23 16:29:31.539 [warning] RequestStore#acceptReply was called without receiving a matching request 8
+2026-05-23 16:29:31.539 [warning] RequestStore#acceptReply was called without receiving a matching request 9
+2026-05-23 16:29:31.539 [warning] RequestStore#acceptReply was called without receiving a matching request 10
+2026-05-23 16:29:31.539 [warning] RequestStore#acceptReply was called without receiving a matching request 11
+2026-05-23 16:29:31.540 [warning] RequestStore#acceptReply was called without receiving a matching request 12
+2026-05-23 16:29:31.540 [warning] RequestStore#acceptReply was called without receiving a matching request 13
+2026-05-23 16:29:31.540 [warning] RequestStore#acceptReply was called without receiving a matching request 14
+2026-05-23 16:29:31.541 [warning] RequestStore#acceptReply was called without receiving a matching request 15
+2026-05-23 16:29:31.541 [warning] RequestStore#acceptReply was called without receiving a matching request 16
+2026-05-23 16:29:31.541 [warning] RequestStore#acceptReply was called without receiving a matching request 17
+2026-05-23 16:29:31.541 [warning] RequestStore#acceptReply was called without receiving a matching request 18
+2026-05-23 16:29:31.541 [warning] RequestStore#acceptReply was called without receiving a matching request 19
+2026-05-23 16:29:31.542 [warning] RequestStore#acceptReply was called without receiving a matching request 20
+2026-05-23 16:29:31.542 [warning] RequestStore#acceptReply was called without receiving a matching request 21
+2026-05-23 16:29:31.542 [warning] RequestStore#acceptReply was called without receiving a matching request 22
+2026-05-23 16:29:31.542 [warning] RequestStore#acceptReply was called without receiving a matching request 23
+2026-05-23 16:29:31.543 [warning] RequestStore#acceptReply was called without receiving a matching request 24
+2026-05-23 16:29:32.218 [info] [CursorProclistService] Config enabled feature (subsample every 10s)
+2026-05-23 16:29:32.903 [warning] RequestStore#acceptReply was called without receiving a matching request 25
+2026-05-23 16:29:32.904 [warning] RequestStore#acceptReply was called without receiving a matching request 26
+2026-05-23 16:29:32.904 [warning] RequestStore#acceptReply was called without receiving a matching request 27
+2026-05-23 16:29:32.904 [warning] RequestStore#acceptReply was called without receiving a matching request 28
+2026-05-23 16:29:32.905 [warning] RequestStore#acceptReply was called without receiving a matching request 29
+2026-05-23 16:29:32.905 [warning] RequestStore#acceptReply was called without receiving a matching request 30
+2026-05-23 16:29:32.905 [warning] RequestStore#acceptReply was called without receiving a matching request 31
+2026-05-23 16:29:32.906 [warning] RequestStore#acceptReply was called without receiving a matching request 32
+2026-05-23 16:29:32.906 [warning] RequestStore#acceptReply was called without receiving a matching request 33
+2026-05-23 16:29:32.907 [warning] RequestStore#acceptReply was called without receiving a matching request 34
+2026-05-23 16:29:32.907 [warning] RequestStore#acceptReply was called without receiving a matching request 35
+2026-05-23 16:29:32.908 [warning] RequestStore#acceptReply was called without receiving a matching request 36
+2026-05-23 16:29:34.924 [info] [<unknown>][b3ab2e73][ManagementConnection] The client has disconnected gracefully, so the connection will be disposed.
+2026-05-23 16:29:35.360 [info] [<unknown>][7277d7e9][ExtensionHostConnection] <265799> Extension Host Process exited with code: 0, signal: null.
+2026-05-23 16:29:35.361 [info] Cancelling previous shutdown timeout
+2026-05-23 16:29:35.361 [info] Last EH closed, waiting before shutting down
+2026-05-23 16:29:38.815 [info] [<unknown>][2dbb8978][ExtensionHostConnection] New connection established.
+2026-05-23 16:29:38.816 [info] [<unknown>][4468576e][ManagementConnection] New connection established.
+2026-05-23 16:29:38.820 [info] [<unknown>][2dbb8978][ExtensionHostConnection] <265905> Launched Extension Host Process.
+2026-05-23 16:29:38.882 [info] [<unknown>][2dbb8978][ExtensionHostConnection] <265905><stderr> Error reading NLS messages file /root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json: Error: ENOENT: no such file or directory, open '/root/.cursor-server/data/clp/3bfb7f1471a52e527cfc1587dd57c7c1.zh-cn/0cf8b06883f54e26bb4f0fb8647c9500ccb43310/nls.messages.json'
+2026-05-23 16:29:40.843 [warning] RequestStore#acceptReply was called without receiving a matching request 61
+2026-05-23 16:29:40.844 [warning] RequestStore#acceptReply was called without receiving a matching request 62
+2026-05-23 16:29:40.844 [warning] RequestStore#acceptReply was called without receiving a matching request 63
+2026-05-23 16:29:40.844 [warning] RequestStore#acceptReply was called without receiving a matching request 64
+2026-05-23 16:29:40.844 [warning] RequestStore#acceptReply was called without receiving a matching request 65
+2026-05-23 16:29:40.844 [warning] RequestStore#acceptReply was called without receiving a matching request 66
+2026-05-23 16:29:40.845 [warning] RequestStore#acceptReply was called without receiving a matching request 67
+2026-05-23 16:29:40.845 [warning] RequestStore#acceptReply was called without receiving a matching request 68
+2026-05-23 16:29:40.845 [warning] RequestStore#acceptReply was called without receiving a matching request 69
+2026-05-23 16:29:40.845 [warning] RequestStore#acceptReply was called without receiving a matching request 70
+2026-05-23 16:29:40.846 [warning] RequestStore#acceptReply was called without receiving a matching request 71
+2026-05-23 16:29:40.846 [warning] RequestStore#acceptReply was called without receiving a matching request 72
+2026-05-23 16:29:41.542 [error] [File Watcher] Unexpected error: inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory (EUNKNOWN) (path: /root)
+2026-05-23 16:29:41.542 [error] [File Watcher (universal)] inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory

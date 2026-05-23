@@ -263,3 +263,53 @@ history | grep git
 git commit -m "pemanagerV1.0"
 cd pemanager/frontend/
 npm run dev
+cd pemanager/deploy/dist/
+ls
+scp pemanager-20260523-0843-x86_64.tar.gz root@217.217.29.210:/root/
+netplan info
+ls
+cd ..
+ls
+scp setup.sh root@217.217.29.210:/root/
+scp ssl-setup.sh root@217.217.29.210:/root/
+cd /etc/netplan/99-pemanager-tunnels.yaml 
+cat /etc/netplan/99-pemanager-tunnels.yaml 
+cat /etc/netplan/99-pemanager-routes.yaml 
+ip route list
+cat /etc/netplan/99-pemanager-routes.yaml 
+cat /etc/netplan/99-pemanager-tunnels.yaml 
+cat /etc/netplan/99-pemanager-routes.yaml 
+cat /etc/netplan/99-pemanager-tunnels.yaml 
+cat /etc/netplan/99-pemanager-routes.yaml 
+ip route list
+ip qee
+ip add
+ip route list
+cat /etc/netplan/99-pemanager-routes.yaml 
+git commit -m "pemanagerV2.0"
+git add .
+git commit -m "pemanagerV2.0"
+git push origin main
+cd pemanager/deploy/
+ls
+./package.sh 
+ls
+cd pemanager/backend/
+cd ..
+source venv/bin/activate
+python backend/manage.py runserver 0.0.0.0:8000
+ip route list
+ps -aux | grep python
+kill -9 17818
+kill -9 178184
+ps -aux | grep python
+cd backend/
+python manage.py runserver 0.0.0.0:8000
+history |  git
+git add .
+history |  git 
+history | grep git
+git commit -m "pemanagerV1.0"
+git push origin main
+cd pemanager/frontend/
+npm run dev

@@ -1,0 +1,29 @@
+2026-05-23 16:29:34.034 [info] Extension host with pid 265799 started
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] Detecting sandbox support...
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] Platform: linux, Shell type: unknown
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] dirname: /root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/out/vs/workbench/api/node
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] Sandbox helper path: /root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/resources/helpers/cursorsandbox
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] process.resourcesPath: undefined
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] process.execPath: /root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/node
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] ripgrep path for sandboxing: /root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/resources/helpers/rg
+2026-05-23 16:29:34.034 [info] [shell-exec:sandbox] [isSandboxHelperSupported] Starting sandbox support check...
+2026-05-23 16:29:34.034 [info] [shell-exec:sandbox] [checkBinaryAvailable] Resolved binary path: /root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/resources/helpers/cursorsandbox
+2026-05-23 16:29:34.034 [info] [shell-exec:sandbox] [checkBinaryAvailable] Binary path exists: true
+2026-05-23 16:29:34.034 [info] [shell-exec:sandbox] [isSandboxHelperSupported] Running preflight with binary: /root/.cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/server/resources/helpers/cursorsandbox
+2026-05-23 16:29:34.034 [info] [shell-exec:sandbox] [isSandboxHelperSupported] CWD: /root
+2026-05-23 16:29:34.034 [info] [shell-exec:sandbox] [isSandboxHelperSupported] Preflight succeeded, sandbox supported!
+2026-05-23 16:29:34.034 [info] [ExtHostShellExec] Sandbox support detected: true, platform: linux, kernelVersion: 6.8.0-111-generic
+2026-05-23 16:29:34.126 [info] ExtensionService#_doActivateExtension anysphere.cursor-agent-exec, startup: true, activationEvent: '*'
+2026-05-23 16:29:34.129 [info] ExtensionService#_doActivateExtension anysphere.cursor-checkout, startup: true, activationEvent: '*'
+2026-05-23 16:29:34.129 [info] ExtensionService#_doActivateExtension anysphere.cursor-polyfills-remote, startup: true, activationEvent: '*'
+2026-05-23 16:29:34.130 [info] ExtensionService#_doActivateExtension vscode.git-base, startup: true, activationEvent: '*', root cause: vscode.git
+2026-05-23 16:29:34.161 [info] [ExtHostShellExec] Initializing terminal executor with userTerminalHint: undefined
+2026-05-23 16:29:34.171 [error] No bundle location found for extension anysphere.cursor-agent-exec
+2026-05-23 16:29:34.171 [error] No bundle location found for extension anysphere.cursor-checkout
+2026-05-23 16:29:34.171 [error] No bundle location found for extension anysphere.cursor-polyfills-remote
+2026-05-23 16:29:35.295 [info] ExtensionService#_doActivateExtension anysphere.cursor-mcp, startup: false, activationEvent: 'api', root cause: anysphere.cursor-agent-exec
+2026-05-23 16:29:35.298 [info] Extension activated success: anysphere.cursor-checkout — 1068ms (code loading: 1067ms, activate call: 1ms, activate resolved: 0ms)
+2026-05-23 16:29:35.298 [info] Extension activated success: anysphere.cursor-polyfills-remote — 1132ms (code loading: 1132ms, activate call: 0ms, activate resolved: 0ms)
+2026-05-23 16:29:35.313 [info] Extension host terminating: received terminate message from renderer
+2026-05-23 16:29:35.316 [error] Failed to load translations for vscode.git-base from vscode-local:/Users/jason/.cursor/extensions/ms-ceintl.vscode-language-pack-zh-hans-1.105.0-universal/translations/extensions/vscode.git-base.i18n.json: Canceled
+2026-05-23 16:29:35.323 [info] Extension host with pid 265799 exiting with code 0

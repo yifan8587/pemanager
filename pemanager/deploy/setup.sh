@@ -129,35 +129,41 @@ ver_ge() {
 }
 
 # ---------------- 软件包矩阵 ----------------
-# 三元组：apt-pkg-name | 检测命令 | 说明（用 $'\x1f' 作为不可见分隔符，避免命令中出现的字符冲突）
+# 三元组：apt-pkg-name | 检测命令 | 说明（用 $'\x1f' 作为不可见分隔符）
+#
+# 检测策略（避免「装了但命令 --version 偶发非零」误判）：
+#   - 有 CLI 的包    → `command -v <bin>`（只判命令存在；版本另外校验）
+#   - 开发库 / 插件  → `dpkg -s <pkg>`（只看包安装状态）
+#   - 极少需要执行的检测（如 venv）才用「实际跑一次」
+#
 SEP=$'\x1f'
 PKG_LIST=(
-    "python3${SEP}python3 -c 'import sys;sys.exit(0 if sys.version_info>=(${MIN_PY_MAJOR},${MIN_PY_MINOR}) else 1)'${SEP}Python ${MIN_PY_MAJOR}.${MIN_PY_MINOR}+（venv 与 Django 5）"
-    "python3-venv${SEP}python3 -m venv /tmp/_venv_check && rm -rf /tmp/_venv_check${SEP}venv 支持"
-    "python3-pip${SEP}pip3 --version${SEP}Python pip"
-    "build-essential${SEP}cc --version${SEP}C 构建工具链（部分依赖编译）"
-    "libffi-dev${SEP}test -f /usr/include/ffi.h || dpkg -s libffi-dev${SEP}cryptography / cffi 编译依赖"
+    "python3${SEP}command -v python3${SEP}Python ${MIN_PY_MAJOR}.${MIN_PY_MINOR}+（venv 与 Django 5）"
+    "python3-venv${SEP}python3 -m venv /tmp/_venv_check >/dev/null 2>&1 && rm -rf /tmp/_venv_check${SEP}venv 支持"
+    "python3-pip${SEP}command -v pip3 || command -v pip${SEP}Python pip"
+    "build-essential${SEP}command -v cc || dpkg -s build-essential${SEP}C 构建工具链（部分依赖编译）"
+    "libffi-dev${SEP}dpkg -s libffi-dev${SEP}cryptography / cffi 编译依赖"
     "libssl-dev${SEP}dpkg -s libssl-dev${SEP}cryptography / cffi 编译依赖"
-    "nginx${SEP}nginx -v${SEP}反向代理 + 静态站点"
-    "netplan.io${SEP}netplan --version${SEP}Netplan（隧道与路由片段）"
-    "wireguard-tools${SEP}wg --version${SEP}WireGuard 用户态工具（wg / wg-quick）"
-    "iproute2${SEP}ip -V${SEP}ip / tc 命令"
-    "iptables${SEP}iptables --version${SEP}iptables（防火墙后端）"
-    "nftables${SEP}nft --version${SEP}nftables（防火墙后端）"
-    "mtr-tiny${SEP}mtr --version${SEP}MTR 测量工具"
-    "iputils-ping${SEP}ping -V 2>&1 | head -n1${SEP}ping/ping6"
-    "traceroute${SEP}traceroute --version${SEP}traceroute"
-    "openssl${SEP}openssl version${SEP}随机密钥生成 + 自签名 SSL"
-    "curl${SEP}curl --version${SEP}HTTP 工具"
-    "sqlite3${SEP}sqlite3 --version${SEP}SQLite CLI"
-    "rsync${SEP}rsync --version${SEP}文件同步"
+    "nginx${SEP}command -v nginx${SEP}反向代理 + 静态站点"
+    "netplan.io${SEP}command -v netplan || dpkg -s netplan.io${SEP}Netplan（隧道与路由片段）"
+    "wireguard-tools${SEP}command -v wg${SEP}WireGuard 用户态工具（wg / wg-quick）"
+    "iproute2${SEP}command -v ip${SEP}ip / tc 命令"
+    "iptables${SEP}command -v iptables${SEP}iptables（防火墙后端）"
+    "nftables${SEP}command -v nft${SEP}nftables（防火墙后端）"
+    "mtr-tiny${SEP}command -v mtr${SEP}MTR 测量工具"
+    "iputils-ping${SEP}command -v ping${SEP}ping/ping6"
+    "traceroute${SEP}command -v traceroute${SEP}traceroute"
+    "openssl${SEP}command -v openssl${SEP}随机密钥生成 + 自签名 SSL"
+    "curl${SEP}command -v curl${SEP}HTTP 工具"
+    "sqlite3${SEP}command -v sqlite3${SEP}SQLite CLI"
+    "rsync${SEP}command -v rsync${SEP}文件同步"
     "ca-certificates${SEP}test -d /etc/ssl/certs${SEP}HTTPS 证书库"
-    "systemd${SEP}systemctl --version${SEP}systemd"
-    "logrotate${SEP}logrotate --version${SEP}日志轮转"
-    "certbot${SEP}certbot --version${SEP}Let's Encrypt 客户端（域名 HTTPS）"
+    "systemd${SEP}command -v systemctl${SEP}systemd"
+    "logrotate${SEP}command -v logrotate${SEP}日志轮转"
+    "certbot${SEP}command -v certbot${SEP}Let's Encrypt 客户端（域名 HTTPS）"
     "python3-certbot-nginx${SEP}dpkg -s python3-certbot-nginx${SEP}certbot nginx 插件"
-    "tar${SEP}tar --version${SEP}归档（package.sh 生成 tar.gz）"
-    "gzip${SEP}gzip --version${SEP}压缩"
+    "tar${SEP}command -v tar${SEP}归档（package.sh 生成 tar.gz）"
+    "gzip${SEP}command -v gzip${SEP}压缩"
 )
 
 MISSING_PKGS=()

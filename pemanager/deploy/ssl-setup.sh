@@ -67,6 +67,11 @@ NGINX_SITE_ENAB="/etc/nginx/sites-enabled/pemanager.conf"
 SSL_DIR="/etc/pemanager/ssl"
 ENV_FILE="/etc/pemanager/pemanager.env"
 HSTS_LINE='add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;'
+SSL_CIPHERS="ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384"
+
+# 默认安装路径（与 deploy.sh 保持一致；可被现有 conf 中的实际值覆盖）
+DEFAULT_INSTALL_DIR="/opt/pemanager"
+DEFAULT_STATIC_ROOT="/var/lib/pemanager/static"
 
 # --------- 状态查询 ---------
 if [[ $STATUS_ONLY -eq 1 ]]; then
@@ -141,42 +146,82 @@ add_env_host_csrf() {
     ok "已联动 ${ENV_FILE}（HOSTS / CSRF）；下一次 systemctl restart pemanager-backend 生效"
 }
 
-# --------- 通用：写入 server_name、443 server 块、80→443 跳转 ---------
-# 入参：$1=server_name 字符串（多值用空格分隔）  $2=证书 path  $3=私钥 path
-inject_https_block() {
+# --------- 解析现有 conf 中的 INSTALL_DIR / STATIC_ROOT（保留 deploy.sh 时的值） ---------
+detect_paths_from_existing_conf() {
+    INSTALL_DIR_DETECTED=""
+    STATIC_ROOT_DETECTED=""
+    if [[ -f "$NGINX_SITE_AVAIL" ]]; then
+        # root /opt/pemanager/frontend/dist;  → INSTALL_DIR=/opt/pemanager
+        INSTALL_DIR_DETECTED=$(grep -E "^[[:space:]]*root[[:space:]]+/" "$NGINX_SITE_AVAIL" \
+            | head -n1 | awk '{print $2}' | sed -E 's|/frontend/dist;?$||;s|;$||')
+        # alias /var/lib/pemanager/static/;   → STATIC_ROOT=/var/lib/pemanager/static
+        STATIC_ROOT_DETECTED=$(grep -E "^[[:space:]]*alias[[:space:]]+/" "$NGINX_SITE_AVAIL" \
+            | head -n1 | awk '{print $2}' | sed -E 's|/?;$||')
+    fi
+    INSTALL_DIR="${INSTALL_DIR_DETECTED:-$DEFAULT_INSTALL_DIR}"
+    STATIC_ROOT="${STATIC_ROOT_DETECTED:-$DEFAULT_STATIC_ROOT}"
+    log "nginx 站点参数：INSTALL_DIR=${INSTALL_DIR}  STATIC_ROOT=${STATIC_ROOT}"
+}
+
+# --------- 整段重渲染 pemanager.conf（80 强制跳转 + 443 完整 server）---------
+# 入参：$1=server_name（多值用空格分隔）  $2=证书 path  $3=私钥 path
+write_https_nginx_conf() {
     local sn="$1" cert="$2" key="$3"
 
-    # 1) 改写 80 server 块的 server_name 为目标 server_name（同时保留 _）
-    #    避免重复修改：先把 server_name <旧> 行匹配后整体替换
-    if grep -q "^[[:space:]]*server_name[[:space:]]" "$NGINX_SITE_AVAIL"; then
-        sed -i "s|^\([[:space:]]*\)server_name[[:space:]].*;|\1server_name ${sn} _;|" "$NGINX_SITE_AVAIL"
+    detect_paths_from_existing_conf
+
+    # /var/www/letsencrypt：certbot --webroot 的挑战根目录
+    mkdir -p /var/www/letsencrypt
+    chown -R root:root /var/www/letsencrypt
+    chmod 0755 /var/www/letsencrypt
+
+    # 备份一次原配置（仅首次切到 HTTPS 时保留 .http 备份）
+    if [[ -f "$NGINX_SITE_AVAIL" && ! -f "${NGINX_SITE_AVAIL}.http.bak" ]]; then
+        cp -a "$NGINX_SITE_AVAIL" "${NGINX_SITE_AVAIL}.http.bak"
+        log "已备份原 HTTP 配置 → ${NGINX_SITE_AVAIL}.http.bak（仅一次）"
     fi
 
-    # 2) 已有 443 server 块？删旧的（位于本配置文件末尾的 # >>> PEMANAGER-SSL >>> 标记之间）
-    if grep -q "# >>> PEMANAGER-SSL >>>" "$NGINX_SITE_AVAIL"; then
-        sed -i '/# >>> PEMANAGER-SSL >>>/,/# <<< PEMANAGER-SSL <<</d' "$NGINX_SITE_AVAIL"
-    fi
+    cat >"$NGINX_SITE_AVAIL" <<EOF
+##
+## PE Manager — nginx 站点配置（HTTPS 模式）
+##
+## 本文件由 deploy/ssl-setup.sh 整段生成；重跑 ssl-setup.sh 会覆盖。
+## 切回 HTTP：cp ${NGINX_SITE_AVAIL}.http.bak ${NGINX_SITE_AVAIL} && nginx -s reload
+##
 
-    # 3) 把原 80 server 块中的所有 location 块抽出，复制到 443 块复用（用临时文件做扩展）
-    #    最稳的做法：直接在文件末尾追加一个 443 server 块，并用同样的 location 配置
-    #    （proxy_pass / try_files / static 等都是同源的，可以重复声明）
-    local STATIC_ROOT_LINE
-    STATIC_ROOT_LINE=$(grep -E "^[[:space:]]*alias[[:space:]]+/var/lib/pemanager" "$NGINX_SITE_AVAIL" | head -n1 | awk '{print $2}' | sed 's/;$//')
-    [[ -z "$STATIC_ROOT_LINE" ]] && STATIC_ROOT_LINE="/var/lib/pemanager/static/"
+upstream pemanager_backend {
+    server unix:/run/pemanager/backend.sock fail_timeout=0;
+}
 
-    local DIST_ROOT
-    DIST_ROOT=$(grep -E "^[[:space:]]*root[[:space:]]+/opt/pemanager" "$NGINX_SITE_AVAIL" | head -n1 | awk '{print $2}' | sed 's/;$//')
-    [[ -z "$DIST_ROOT" ]] && DIST_ROOT="/opt/pemanager/frontend/dist"
-
-    cat >>"$NGINX_SITE_AVAIL" <<EOF
-
-# >>> PEMANAGER-SSL >>>
-# 由 deploy/ssl-setup.sh 写入。请勿手工编辑此块；下一次执行 ssl-setup.sh 会被整段替换。
+# -------- HTTP 80：仅保留 ACME challenge；其余全部 301 强制跳转到 HTTPS --------
 server {
-    listen 443 ssl;
-    listen [::]:443 ssl;
-    http2 on;
-    server_name ${sn};
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name ${sn} _;
+
+    access_log /var/log/pemanager/nginx-access.log;
+    error_log  /var/log/pemanager/nginx-error.log;
+
+    # certbot --webroot 验证用；Let's Encrypt 续期时被命中
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+        try_files \$uri =404;
+    }
+
+    # 其余请求一律强制跳 HTTPS
+    location / {
+        return 301 https://\$host\$request_uri;
+    }
+}
+
+# -------- HTTPS 443 --------
+server {
+    # http2 写在 listen 行，兼容 nginx 1.18 / 1.20 / 1.22 / 1.24（含 Ubuntu 22.04 / 24.04 包）；
+    # nginx 1.25+ 的独立 \`http2 on;\` 也可用，但为了一致性这里统一用 listen 形式。
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name ${sn} _;
 
     ssl_certificate     ${cert};
     ssl_certificate_key ${key};
@@ -184,31 +229,38 @@ server {
     ssl_session_cache shared:PEM:10m;
     ssl_protocols TLSv1.2 TLSv1.3;
     ssl_prefer_server_ciphers off;
-    ssl_ciphers "ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384:ECDHE-ECDSA-CHACHA20-POLY1305:ECDHE-RSA-CHACHA20-POLY1305:DHE-RSA-AES128-GCM-SHA256:DHE-RSA-AES256-GCM-SHA384";
+    ssl_ciphers "${SSL_CIPHERS}";
     ${HSTS_LINE}
 
     client_max_body_size 16M;
     client_body_buffer_size 1M;
+
     access_log /var/log/pemanager/nginx-access.log;
     error_log  /var/log/pemanager/nginx-error.log;
 
-    root ${DIST_ROOT};
+    root ${INSTALL_DIR}/frontend/dist;
     index index.html;
 
-    location / { try_files \$uri \$uri/ /index.html; }
+    # 前端 SPA（Vue history fallback）
+    location / {
+        try_files \$uri \$uri/ /index.html;
+    }
 
+    # 静态资源长缓存（带 hash 文件名）
     location ~* \.(?:js|css|woff2?|ttf|otf|eot|ico|png|jpg|jpeg|gif|svg|webp)\$ {
         expires 30d;
         add_header Cache-Control "public, immutable";
         try_files \$uri =404;
     }
 
+    # Django admin / DRF 自带静态
     location /static/ {
-        alias ${STATIC_ROOT_LINE};
+        alias ${STATIC_ROOT}/;
         expires 7d;
         add_header Cache-Control "public";
     }
 
+    # API 反代到 gunicorn unix socket
     location /api/ {
         proxy_pass http://pemanager_backend;
         proxy_http_version 1.1;
@@ -232,60 +284,108 @@ server {
         proxy_set_header X-Forwarded-Proto \$scheme;
     }
 }
-# <<< PEMANAGER-SSL <<<
 EOF
 
-    # 4) 把 80 server 块的 location / 改为 301 到 https，其他 location 也跳转
-    #    采用比较激进的策略：80 server 内只保留 /.well-known/acme-challenge/ + 跳转
-    #    使用 awk 替换 80 server 块
-    python3 - "$NGINX_SITE_AVAIL" "$sn" <<'PYEOF'
-import sys, re
-path, sn = sys.argv[1], sys.argv[2]
-with open(path) as f:
-    text = f.read()
+    [[ -L "$NGINX_SITE_ENAB" ]] || ln -s "$NGINX_SITE_AVAIL" "$NGINX_SITE_ENAB"
+    # 关闭 default site（与 listen 80 default_server 冲突）
+    if [[ -L /etc/nginx/sites-enabled/default ]]; then
+        rm -f /etc/nginx/sites-enabled/default
+    fi
+    ok "已重写 ${NGINX_SITE_AVAIL}（HTTPS 强制跳转 + 443 反代）"
+}
 
-# 仅匹配第一段 80 server 块（# >>> PEMANAGER-SSL >>> 之前的）
-def replace_first_80(text):
-    pattern = re.compile(
-        r"(server\s*\{\s*[^}]*?listen\s+80[^}]*?\})",  # 不够 robust，但够用
-        re.DOTALL,
-    )
-    repl = (
-        "server {\n"
-        "    listen 80 default_server;\n"
-        "    listen [::]:80 default_server;\n"
-        f"    server_name {sn} _;\n"
-        "    access_log /var/log/pemanager/nginx-access.log;\n"
-        "    error_log  /var/log/pemanager/nginx-error.log;\n"
-        "\n"
-        "    # ACME challenge 直发到磁盘（certbot --webroot 兼容）\n"
-        "    location /.well-known/acme-challenge/ {\n"
-        "        root /var/www/letsencrypt;\n"
-        "        default_type text/plain;\n"
-        "    }\n"
-        "\n"
-        "    location / { return 301 https://$host$request_uri; }\n"
-        "}"
-    )
-    new_text, n = pattern.subn(repl, text, count=1)
-    if n == 0:
-        return text
-    return new_text
-
-text = replace_first_80(text)
-with open(path, "w") as f:
-    f.write(text)
-PYEOF
-
-    mkdir -p /var/www/letsencrypt
-    chown -R root:root /var/www/letsencrypt
-    chmod 0755 /var/www/letsencrypt
+# 兼容旧调用名
+inject_https_block() {
+    write_https_nginx_conf "$@"
 }
 
 reload_nginx() {
     nginx -t
     systemctl reload nginx || systemctl restart nginx
     ok "nginx 已 reload"
+}
+
+# ===========================================================================
+# 写一份「临时：80-only + ACME 挑战目录」站点配置，供 certbot --webroot 验证
+# ===========================================================================
+write_http_only_for_acme() {
+    local sn="$1"
+    detect_paths_from_existing_conf
+    mkdir -p /var/www/letsencrypt
+    chown -R root:root /var/www/letsencrypt
+    chmod 0755 /var/www/letsencrypt
+
+    if [[ -f "$NGINX_SITE_AVAIL" && ! -f "${NGINX_SITE_AVAIL}.http.bak" ]]; then
+        cp -a "$NGINX_SITE_AVAIL" "${NGINX_SITE_AVAIL}.http.bak"
+    fi
+
+    cat >"$NGINX_SITE_AVAIL" <<EOF
+##
+## PE Manager — nginx 站点配置（临时：ACME 挑战阶段，先维持 HTTP 80 在线）
+## 由 deploy/ssl-setup.sh 生成；签发证书后会被 write_https_nginx_conf 覆盖。
+##
+
+upstream pemanager_backend {
+    server unix:/run/pemanager/backend.sock fail_timeout=0;
+}
+
+server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    server_name ${sn} _;
+
+    access_log /var/log/pemanager/nginx-access.log;
+    error_log  /var/log/pemanager/nginx-error.log;
+
+    client_max_body_size 16M;
+    client_body_buffer_size 1M;
+
+    location ^~ /.well-known/acme-challenge/ {
+        root /var/www/letsencrypt;
+        default_type text/plain;
+        try_files \$uri =404;
+    }
+
+    root ${INSTALL_DIR}/frontend/dist;
+    index index.html;
+    location / { try_files \$uri \$uri/ /index.html; }
+    location ~* \.(?:js|css|woff2?|ttf|otf|eot|ico|png|jpg|jpeg|gif|svg|webp)\$ {
+        expires 30d;
+        add_header Cache-Control "public, immutable";
+        try_files \$uri =404;
+    }
+    location /static/ {
+        alias ${STATIC_ROOT}/;
+        expires 7d;
+        add_header Cache-Control "public";
+    }
+    location /api/ {
+        proxy_pass http://pemanager_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Connection        "";
+        proxy_read_timeout  300s;
+        proxy_send_timeout  300s;
+        proxy_connect_timeout 10s;
+        proxy_buffering off;
+    }
+    location /admin/ {
+        proxy_pass http://pemanager_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host              \$host;
+        proxy_set_header X-Real-IP         \$remote_addr;
+        proxy_set_header X-Forwarded-For   \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOF
+    [[ -L "$NGINX_SITE_ENAB" ]] || ln -s "$NGINX_SITE_AVAIL" "$NGINX_SITE_ENAB"
+    if [[ -L /etc/nginx/sites-enabled/default ]]; then
+        rm -f /etc/nginx/sites-enabled/default
+    fi
 }
 
 # ===========================================================================
@@ -305,17 +405,9 @@ do_domain_mode() {
     if [[ -d "$CERT_DIR" && $FORCE -ne 1 ]]; then
         ok "${CERT_DIR} 已存在；将复用现有证书（如要重签请加 --force）"
     else
-        # 先确保 80 端口监听包含本域名并暴露 /.well-known
-        log "在 nginx 80 server 中预留 ACME 挑战目录 /var/www/letsencrypt"
-        mkdir -p /var/www/letsencrypt
-        # 临时改 server_name（这样 ACME 的 HTTP-01 才能命中本站点）
-        sed -i "s|^\([[:space:]]*\)server_name[[:space:]].*;|\1server_name ${domain} _;|" "$NGINX_SITE_AVAIL"
-        # 临时插入 /.well-known/acme-challenge 的 location（如不存在）
-        if ! grep -q "/.well-known/acme-challenge/" "$NGINX_SITE_AVAIL"; then
-            sed -i "/listen 80/,/^}/{ /^}/i\\
-    location /.well-known/acme-challenge/ { root /var/www/letsencrypt; default_type text/plain; }
-            }" "$NGINX_SITE_AVAIL"
-        fi
+        # 整段重渲染：维持 80 在线 + 暴露 /.well-known/acme-challenge/，不强制跳转 HTTPS
+        log "为 ACME 挑战准备临时 80-only 站点配置（HTTPS 切换前不强制跳转）"
+        write_http_only_for_acme "$domain"
         reload_nginx
 
         local CB_OPTS=(certonly --webroot -w /var/www/letsencrypt -d "$domain" --non-interactive --agree-tos)
