@@ -70,3 +70,19 @@
 2026-05-23 16:29:41.542 [error] [File Watcher (universal)] inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory
 2026-05-23 16:29:52.328 [info] [CursorProclistService] Config enabled feature (subsample every 10s)
 2026-05-23 16:34:35.362 [info] New EH opened, aborting shutdown
+2026-05-23 16:38:31.598 [warning] RequestStore#acceptReply was called without receiving a matching request 73
+2026-05-23 16:38:31.598 [warning] RequestStore#acceptReply was called without receiving a matching request 74
+2026-05-23 16:38:31.599 [warning] RequestStore#acceptReply was called without receiving a matching request 75
+2026-05-23 16:38:31.600 [warning] RequestStore#acceptReply was called without receiving a matching request 76
+2026-05-23 16:38:31.600 [warning] RequestStore#acceptReply was called without receiving a matching request 77
+2026-05-23 16:38:31.600 [warning] RequestStore#acceptReply was called without receiving a matching request 78
+2026-05-23 16:38:31.600 [warning] RequestStore#acceptReply was called without receiving a matching request 79
+2026-05-23 16:38:31.601 [warning] RequestStore#acceptReply was called without receiving a matching request 80
+2026-05-23 16:38:31.601 [warning] RequestStore#acceptReply was called without receiving a matching request 81
+2026-05-23 16:38:31.601 [warning] RequestStore#acceptReply was called without receiving a matching request 82
+2026-05-23 16:38:31.601 [warning] RequestStore#acceptReply was called without receiving a matching request 83
+2026-05-23 16:38:31.602 [warning] RequestStore#acceptReply was called without receiving a matching request 84
+2026-05-23 17:13:26.703 [info] [<unknown>][4468576e][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...
+2026-05-23 17:13:57.632 [info] [<unknown>][4468576e][ManagementConnection] Another client has connected, will shorten the wait for reconnection 5m before disposing...
+2026-05-23 17:13:57.632 [info] [<unknown>][2dbb8978][ExtensionHostConnection] The client has reconnected.
+2026-05-23 17:13:57.653 [info] [<unknown>][4468576e][ManagementConnection] The client has reconnected.

@@ -313,3 +313,30 @@ git commit -m "pemanagerV1.0"
 git push origin main
 cd pemanager/frontend/
 npm run dev
+git add .
+history | grep 
+history | grep git
+git commit -m "pemanagerV1.0"
+git push origin main
+cat .ssh/id_ed25519.pub 
+cat .ssh/id_ed25519
+git push origin main
+git status
+git add
+git add .
+git commit -m "pemanagerV1.0"
+git push origin main
+history | grep git
+git commit -m "pemanagerV2.0"
+git add .
+git commit -m "pemanagerV2.0"
+git push origin main
+git remote -v
+git remote add origin git@github.com:yifan8587/pemanager.git
+git push origin main
+ping github.com
+cd pemanager/deploy/
+ls
+source package.sh 
+ls
+cd dist/p

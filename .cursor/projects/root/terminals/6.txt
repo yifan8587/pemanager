@@ -1,0 +1,62 @@
+---
+pid: 267824
+cwd: /root
+last_command: git commit -m "pemanagerV2.0"
+last_exit_code: 1
+---
+root@10ghk-web:~# cd pemanager/deploy/dist/
+root@10ghk-web:~/pemanager/deploy/dist# ls
+pemanager-20260523-0843-x86_64.tar.gz  pemanager-20260523-1638-x86_64.tar.gz
+root@10ghk-web:~/pemanager/deploy/dist# ls -ls
+total 656
+328 -rw-r--r-- 1 root root 331951 May 23 08:43 pemanager-20260523-0843-x86_64.tar.gz
+328 -rw-r--r-- 1 root root 331917 May 23 16:38 pemanager-20260523-1638-x86_64.tar.gz
+root@10ghk-web:~/pemanager/deploy/dist# scp pemanager-20260523-1638-x86_64.tar.gz root@38.165.232.58:/root/
+The authenticity of host '38.165.232.58 (38.165.232.58)' can't be established.
+ED25519 key fingerprint is SHA256:ho0eJQ7VD1ThCy+wslobmGbcWwNOtvQ2a0rVHeO5v0E.
+This key is not known by any other names.
+Are you sure you want to continue connecting (yes/no/[fingerprint])? yes
+Warning: Permanently added '38.165.232.58' (ED25519) to the list of known hosts.
+root@38.165.232.58's password: 
+pemanager-20260523-1638-x86_64.tar.gz                                                                                                             100%  324KB 142.5KB/s   00:02    
+root@10ghk-web:~/pemanager/deploy/dist# git remote show origin
+* remote origin
+  Fetch URL: https://github.com/yifan8587/pemanager.git
+  Push  URL: https://github.com/yifan8587/pemanager.git
+  HEAD branch: main
+  Remote branch:
+    main tracked
+  Local branch configured for 'git pull':
+    main merges with remote main
+  Local ref configured for 'git push':
+    main pushes to main (fast-forwardable)
+root@10ghk-web:~/pemanager/deploy/dist# cd ..
+root@10ghk-web:~/pemanager/deploy# cd /root/
+root@10ghk-web:~# git commit -m "pemanagerV2.0"
+On branch main
+Your branch is ahead of 'origin/main' by 3 commits.
+  (use "git push" to publish your local commits)
+
+Changes not staged for commit:
+  (use "git add/rm <file>..." to update what will be committed)
+  (use "git restore <file>..." to discard changes in working directory)
+        modified:   .bash_history
+        modified:   .cursor-server/.cli.0cf8b06883f54e26bb4f0fb8647c9500ccb43310.log
+        modified:   .cursor-server/cli/servers/Stable-0cf8b06883f54e26bb4f0fb8647c9500ccb43310/log.txt
+        modified:   .cursor-server/data/logs/20260523T162931/exthost2/anysphere.cursor-agent-exec/Cursor Agent Exec.log
+        modified:   .cursor-server/data/logs/20260523T162931/exthost2/anysphere.cursor-commits/Cursor Agent Review.log
+        modified:   .cursor-server/data/logs/20260523T162931/exthost2/anysphere.cursor-retrieval/Cursor Indexing & Retrieval.log
+        modified:   .cursor-server/data/logs/20260523T162931/exthost2/vscode.git/Git.log
+        modified:   .cursor-server/data/logs/20260523T162931/remoteagent.log
+        deleted:    .cursor/projects/root/terminals/5.txt
+        modified:   .cursor/skills-cursor/.sync-manifest.json
+        modified:   .ssh/known_hosts
+        modified:   .ssh/known_hosts.old
+
+Untracked files:
+  (use "git add <file>..." to include in what will be committed)
+        .cursor/projects/root/terminals/6.txt
+        pemanager/deploy/dist/pemanager-20260523-1638-x86_64.tar.gz
+
+no changes added to commit (use "git add" and/or "git commit -a")
+root@10ghk-web:~# git add .

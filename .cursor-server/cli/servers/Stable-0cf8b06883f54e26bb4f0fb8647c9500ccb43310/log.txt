@@ -76,3 +76,19 @@ Last EH closed, waiting before shutting down
 [16:29:52] [CursorProclistService] Config enabled feature (subsample every 10s)
 New EH opened, aborting shutdown
 [16:34:35] New EH opened, aborting shutdown
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 73
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 74
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 75
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 76
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 77
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 78
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 79
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 80
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 81
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 82
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 83
+[16:38:31] RequestStore#acceptReply was called without receiving a matching request 84
+[17:13:26] [<unknown>][4468576e][ManagementConnection] The client has disconnected, will wait for reconnection 3h before disposing...
+[17:13:57] [<unknown>][4468576e][ManagementConnection] Another client has connected, will shorten the wait for reconnection 5m before disposing...
+[17:13:57] [<unknown>][2dbb8978][ExtensionHostConnection] The client has reconnected.
+[17:13:57] [<unknown>][4468576e][ManagementConnection] The client has reconnected.
