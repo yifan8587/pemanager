@@ -1,5 +1,11 @@
+## PE Manager — 后端运行时依赖
+## 版本下限与项目所测试通过的最低版本对齐；setup.sh 会校验对应 Python ≥ 3.10。
+
 django>=5.0,<6
 djangorestframework>=3.14
+djangorestframework-simplejwt>=5.3
 django-cors-headers>=4.0
 PyYAML>=6.0
 python-wireguard>=0.2.2
+# 部署阶段必须；setup.sh / deploy.sh 也会在 venv 中 pip install 'gunicorn>=21.2'
+gunicorn>=21.2

@@ -28,6 +28,10 @@ from resourcemanage.serializers import (
     IPAddressEntrySerializer,
     IPAllocateSerializer,
     IPAllocateWithRouteSerializer,
+    IPBulkAllocateSerializer,
+    IPBulkCreateSerializer,
+    IPBulkRecycleSerializer,
+    IPBulkReleaseSerializer,
     IPRecycleSerializer,
     IPReleaseSerializer,
     IPReserveSerializer,
@@ -150,6 +154,90 @@ class IPAddressEntryViewSet(CustomerScopedByCustomerFKMixin, viewsets.ModelViewS
         except Exception as e:  # noqa: BLE001
             raise DRFValidationError(str(e)) from e
         return Response(IPAddressEntrySerializer(entry).data, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/bulk-create', permission_classes=[IsAuthenticated, IsAdmin])
+    def bulk_create(self, request):
+        """批量录入：起止 start~end 与 addresses 二选一或并用，结果聚合返回。"""
+        s = IPBulkCreateSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        try:
+            result = operations.bulk_create_ips(
+                addresses=data.get('addresses') or [],
+                start=str(data['start']) if data.get('start') else None,
+                end=str(data['end']) if data.get('end') else None,
+                state=data.get('state') or 'available',
+                subnet_label=data.get('subnet_label') or '',
+                actor=data.get('actor') or 'api',
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/bulk-allocate', permission_classes=[IsAuthenticated, IsAdmin])
+    def bulk_allocate(self, request):
+        """批量分配 IP 给客户；每条独立事务、失败不中断。
+
+        可选 `route_template`：为每个 IP 同步创建一条路由意图（默认 host /32）。
+        可选 `apply_to_system=true`：分配完成后立即对新建路由 ids 用 `ip route replace` 即时下发。
+        """
+        s = IPBulkAllocateSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        cust = ResourceCustomer.objects.filter(code=data['customer_code']).first()
+        if not cust:
+            raise DRFValidationError({'customer_code': '客户不存在'})
+        # route_template 字段值若是 ReturnDict / OrderedDict 都可直接 unpack
+        rt_validated = data.get('route_template')
+        route_template = dict(rt_validated) if rt_validated else None
+        if route_template and route_template.get('gateway'):
+            route_template['gateway'] = str(route_template['gateway'])
+        try:
+            result = operations.bulk_allocate_ips(
+                addresses=[str(a) for a in data['addresses']],
+                customer=cust,
+                interface_code=data.get('interface_code') or '',
+                subnet_label=data.get('subnet_label') or '',
+                allow_from_reserved=data.get('allow_from_reserved', True),
+                route_template=route_template,
+                apply_to_system=bool(data.get('apply_to_system') or False),
+                persist_to_netplan=bool(data.get('persist_to_netplan') or False),
+                actor=data.get('actor') or 'api',
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/bulk-release', permission_classes=[IsAuthenticated, IsAdmin])
+    def bulk_release(self, request):
+        """批量释放（含删除关联路由意图）。"""
+        s = IPBulkReleaseSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        try:
+            result = operations.bulk_release_ips(
+                addresses=[str(a) for a in data['addresses']],
+                actor=data.get('actor') or 'api',
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(result, status=status.HTTP_200_OK)
+
+    @action(detail=False, methods=['post'], url_path='actions/bulk-recycle', permission_classes=[IsAuthenticated, IsAdmin])
+    def bulk_recycle(self, request):
+        """批量回收（标记为 recycled，不可再分配）。"""
+        s = IPBulkRecycleSerializer(data=request.data)
+        s.is_valid(raise_exception=True)
+        data = s.validated_data
+        try:
+            result = operations.bulk_recycle_ips(
+                addresses=[str(a) for a in data['addresses']],
+                reason=data.get('reason') or '',
+                actor=data.get('actor') or 'api',
+            )
+        except Exception as e:  # noqa: BLE001
+            raise DRFValidationError(str(e)) from e
+        return Response(result, status=status.HTTP_200_OK)
 
     @action(detail=False, methods=['post'], url_path='actions/allocate-with-route', permission_classes=[IsAuthenticated, IsAdmin])
     def allocate_with_route(self, request):

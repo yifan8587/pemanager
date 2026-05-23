@@ -1,0 +1,40 @@
+---
+pid: 225615
+cwd: "/root/pemanager/frontend"
+command: "source /root/pemanager/venv/bin/activate && cd /root/pemanager/backend && python manage.py runserver 127.0.0.1:8001 --noreload 2>&1"
+started_at: 2026-05-23T07:40:00.583Z
+running_for_ms: 105020   
+---
+Not Found: /api/accountmanage/token/
+[23/May/2026 15:40:47] "POST /api/accountmanage/token/ HTTP/1.1" 404 14479
+[23/May/2026 15:40:57] "POST /api/accountmanage/auth/login/ HTTP/1.1" 200 1018
+[23/May/2026 15:41:03] "POST /api/accountmanage/auth/login/ HTTP/1.1" 200 1018
+[23/May/2026 15:41:03] "POST /api/resourcemanage/ip-addresses/actions/bulk-create/ HTTP/1.1" 200 123
+[23/May/2026 15:41:03] "POST /api/resourcemanage/ip-addresses/actions/bulk-create/ HTTP/1.1" 200 141
+[23/May/2026 15:41:11] "POST /api/accountmanage/auth/login/ HTTP/1.1" 200 1018
+[23/May/2026 15:41:11] "GET /api/resourcemanage/customers/ HTTP/1.1" 200 302
+[23/May/2026 15:41:21] "POST /api/accountmanage/auth/login/ HTTP/1.1" 200 1018
+[23/May/2026 15:41:21] "POST /api/resourcemanage/ip-addresses/actions/bulk-allocate/ HTTP/1.1" 200 182
+[23/May/2026 15:41:21] "POST /api/resourcemanage/ip-addresses/actions/bulk-release/ HTTP/1.1" 200 177
+[23/May/2026 15:41:21] "POST /api/resourcemanage/ip-addresses/actions/bulk-recycle/ HTTP/1.1" 200 239
+Bad Request: /api/resourcemanage/ip-addresses/actions/bulk-create/
+[23/May/2026 15:41:21] "POST /api/resourcemanage/ip-addresses/actions/bulk-create/ HTTP/1.1" 400 67
+Bad Request: /api/resourcemanage/ip-addresses/actions/bulk-create/
+[23/May/2026 15:41:22] "POST /api/resourcemanage/ip-addresses/actions/bulk-create/ HTTP/1.1" 400 57
+[23/May/2026 15:41:32] "POST /api/accountmanage/auth/login/ HTTP/1.1" 200 1018
+[23/May/2026 15:41:32] "GET /api/resourcemanage/ip-addresses/?subnet_label=smoke-test HTTP/1.1" 200 2099
+[23/May/2026 15:41:38] "POST /api/accountmanage/auth/login/ HTTP/1.1" 200 1018
+[23/May/2026 15:41:38] "GET /api/resourcemanage/ip-addresses/?subnet_label=smoke-test HTTP/1.1" 200 2099
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/3/ HTTP/1.1" 204 0
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/4/ HTTP/1.1" 204 0
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/5/ HTTP/1.1" 204 0
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/6/ HTTP/1.1" 204 0
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/7/ HTTP/1.1" 204 0
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/8/ HTTP/1.1" 204 0
+[23/May/2026 15:41:38] "DELETE /api/resourcemanage/ip-addresses/9/ HTTP/1.1" 204 0
+
+---
+exit_code: unknown
+elapsed_ms: 105300
+ended_at: 2026-05-23T07:41:45.883Z
+---

@@ -106,8 +106,9 @@ class DesiredRouteConfig(models.Model):
             except ValueError as exc:
                 raise ValidationError({'dest_cidr': f'不是合法 CIDR: {exc}'}) from exc
 
-        if self.on_link and self.gateway:
-            raise ValidationError('on-link 与网关 (via) 不宜同时配置')
+        # netplan routes 与 `ip route` 都允许 `via X onlink` 同时出现，
+        # 这正是 onlink 的语义本身（把不直连的下一跳强制视为可达）。
+        # 因此不再禁止 on_link 与 gateway 共存。
 
         if not self.on_link and not self.gateway and dest.lower() not in {'default', '::/0', '0.0.0.0/0'}:
             # 非默认路由通常需要 via 或显式 on-link

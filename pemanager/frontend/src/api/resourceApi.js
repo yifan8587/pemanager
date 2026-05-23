@@ -26,6 +26,16 @@ export const resourceApi = {
   releaseIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/release/', payload),
   recycleIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/recycle/', payload),
   restoreIp: (payload) => http.post('/api/resourcemanage/ip-addresses/actions/restore/', payload),
+  // 批量：payload 形如 { start, end, addresses?, state?, subnet_label? }
+  bulkCreateIps: (payload) =>
+    http.post('/api/resourcemanage/ip-addresses/actions/bulk-create/', payload),
+  // payload: { addresses: [...], customer_code, interface_code?, subnet_label?, allow_from_reserved? }
+  bulkAllocateIps: (payload) =>
+    http.post('/api/resourcemanage/ip-addresses/actions/bulk-allocate/', payload),
+  bulkReleaseIps: (payload) =>
+    http.post('/api/resourcemanage/ip-addresses/actions/bulk-release/', payload),
+  bulkRecycleIps: (payload) =>
+    http.post('/api/resourcemanage/ip-addresses/actions/bulk-recycle/', payload),
 
   listPools: () => http.get('/api/resourcemanage/bandwidth-pools/').then((r) => unwrapList(r.data)),
   createPool: (payload) => http.post('/api/resourcemanage/bandwidth-pools/', payload),

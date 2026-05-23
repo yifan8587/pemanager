@@ -151,6 +151,75 @@ class IPAllocateWithRouteSerializer(IPAllocateSerializer):
     route = _RouteIntentSerializer(required=False)
 
 
+# ---- 批量 IP 操作 ----
+
+class IPBulkCreateSerializer(serializers.Serializer):
+    """录入：起止区间 start~end 与显式 addresses 至少二选一。"""
+
+    start = serializers.IPAddressField(required=False, allow_null=True)
+    end = serializers.IPAddressField(required=False, allow_null=True)
+    addresses = serializers.ListField(
+        child=serializers.IPAddressField(), required=False, allow_empty=True, default=list
+    )
+    state = serializers.ChoiceField(
+        choices=['available', 'reserved'], default='available', required=False
+    )
+    subnet_label = serializers.CharField(required=False, allow_blank=True, default='')
+    actor = serializers.CharField(required=False, default='api')
+
+    def validate(self, attrs):
+        has_range = bool(attrs.get('start')) and bool(attrs.get('end'))
+        single_range = bool(attrs.get('start')) ^ bool(attrs.get('end'))
+        if single_range:
+            raise serializers.ValidationError('start 与 end 必须同时提供')
+        if not has_range and not attrs.get('addresses'):
+            raise serializers.ValidationError('请提供起止区间或显式 addresses')
+        return attrs
+
+
+class _IPBulkRouteTemplateSerializer(serializers.Serializer):
+    """批量分配 IP 时的「路由模板」：每个 IP 会派生为一条路由意图。"""
+
+    dest_cidr_mode = serializers.ChoiceField(
+        choices=['host', 'custom'], default='host', required=False
+    )
+    # custom 模式下生效；host 模式下忽略
+    dest_cidr = serializers.CharField(required=False, allow_blank=True, default='')
+    interface_name = serializers.CharField(required=False, allow_blank=True, default='')
+    gateway = serializers.IPAddressField(required=False, allow_null=True)
+    on_link = serializers.BooleanField(required=False, default=False)
+    metric = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    route_table = serializers.IntegerField(required=False, allow_null=True, min_value=0)
+    netplan_device_class = serializers.CharField(required=False, allow_blank=True, default='')
+    remark = serializers.CharField(required=False, allow_blank=True, default='')
+
+
+class IPBulkAllocateSerializer(serializers.Serializer):
+    addresses = serializers.ListField(child=serializers.IPAddressField(), allow_empty=False)
+    customer_code = serializers.SlugField()
+    interface_code = serializers.CharField(required=False, allow_blank=True, default='')
+    subnet_label = serializers.CharField(required=False, allow_blank=True, default='')
+    allow_from_reserved = serializers.BooleanField(default=True)
+    # 同步创建路由（每 IP 一条 host 路由为默认）
+    route_template = _IPBulkRouteTemplateSerializer(required=False)
+    # 分配完成后立即对新建的路由 ids 用 `ip route replace` 即时下发
+    apply_to_system = serializers.BooleanField(required=False, default=False)
+    # 在即时下发后追加 netplan 片段写入+generate，使重启后路由仍生效
+    persist_to_netplan = serializers.BooleanField(required=False, default=False)
+    actor = serializers.CharField(required=False, default='api')
+
+
+class IPBulkReleaseSerializer(serializers.Serializer):
+    addresses = serializers.ListField(child=serializers.IPAddressField(), allow_empty=False)
+    actor = serializers.CharField(required=False, default='api')
+
+
+class IPBulkRecycleSerializer(serializers.Serializer):
+    addresses = serializers.ListField(child=serializers.IPAddressField(), allow_empty=False)
+    reason = serializers.CharField(required=False, allow_blank=True, default='')
+    actor = serializers.CharField(required=False, default='api')
+
+
 class BandwidthUpsertSerializer(serializers.Serializer):
     pool_name = serializers.CharField()
     interface_code = serializers.CharField()

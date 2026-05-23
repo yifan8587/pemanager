@@ -2,6 +2,12 @@
 
 本文档描述 `deploy/deploy.sh` 的工作流、生成的目录结构、systemd / nginx 配置、权限模型、HTTPS 启用、升级与回滚。
 
+> 配套文档：
+> - **环境检查 / 版本升级**：[setup.md](./setup.md)
+> - **HTTPS（Let's Encrypt 域名 / 自签名 IP）**：[ssl.md](./ssl.md)
+> - **离线压缩包制作 / 一键解压安装**：[package.md](./package.md)
+> - **API 接口文档**：[API.md](./API.md)
+
 ---
 
 ## 1. 部署架构
@@ -54,12 +60,15 @@
 
 ## 3. 一键部署
 
-### 3.1 首次部署
+> `deploy.sh` 默认会在开始时**先调用 `setup.sh --yes`** 做一次环境检查 + 版本升级；
+> 如需跳过（例如离线包内已经做过），加 `--skip-setup-check`。
+
+### 3.1 首次部署（HTTP，最简）
 
 ```bash
 cd /root/pemanager                     # 进入源码根
-sudo bash deploy/setup.sh --yes        # 安装系统依赖
-sudo bash deploy/deploy.sh             # 一键部署
+sudo bash deploy/setup.sh --yes        # 可选：单独跑一遍环境检查
+sudo bash deploy/deploy.sh             # 一键部署（HTTP 80）
 ```
 
 完成后访问：
@@ -67,7 +76,28 @@ sudo bash deploy/deploy.sh             # 一键部署
 - API：`http://<本机IP>/api/accountmanage/health/`
 - 默认账号：`admin` / `admin123`（详见 `/etc/pemanager/pemanager.env`）
 
-### 3.2 升级（仅更新代码、不动配置）
+### 3.2 首次部署（HTTPS）
+
+**有公网域名 + 80/443 端口可达**（推荐：Let's Encrypt 自动续期）：
+
+```bash
+sudo bash deploy/deploy.sh --ssl-domain pe.example.com --ssl-email admin@example.com
+```
+
+**只有 IP（无域名）**：自动用 OpenSSL 生成 10 年自签名证书，并把所有给出的 IP 写到 SAN（浏览器会提示「不安全」，可手工信任本证书）：
+
+```bash
+sudo bash deploy/deploy.sh --ssl-ip                # 自动取本机首个 IPv4
+sudo bash deploy/deploy.sh --ssl-ip 1.2.3.4
+sudo bash deploy/deploy.sh --ssl-ip 1.2.3.4,fd00::1   # 多 IP / IPv6 / SAN
+```
+
+> 启用 HTTPS 后 `deploy.sh` 会自动把域名/IP 追加到 `DJANGO_ALLOWED_HOSTS`、
+> `DJANGO_CSRF_TRUSTED_ORIGINS`、`PEMANAGER_EXTRA_ORIGINS`，无需手动再改 env。
+
+HTTPS 启用 / 续期 / 状态查询全部由独立脚本 `deploy/ssl-setup.sh` 提供，详见 [ssl.md](./ssl.md)。
+
+### 3.3 升级（仅更新代码、不动配置）
 
 ```bash
 cd /root/pemanager
@@ -81,15 +111,32 @@ sudo bash deploy/deploy.sh --update    # 同步代码、装依赖、build、migr
 - 重新 `vite build`
 - `migrate` + `collectstatic`
 - 重启 `pemanager-backend.service` 与 `pemanager-monitor.service`
-- **保留** 已有 `/etc/pemanager/pemanager.env` 与 `/etc/nginx/sites-available/pemanager.conf`
+- **保留** 已有 `/etc/pemanager/pemanager.env`、`/etc/nginx/sites-available/pemanager.conf` 以及 HTTPS 证书
 
-### 3.3 在另一台机器部署 / 指定源码
+### 3.4 在另一台机器部署 / 指定源码
 
 ```bash
 sudo bash deploy/deploy.sh \
     --src /tmp/pemanager-src \
     --host pe.example.com          # 把 pe.example.com 追加进 ALLOWED_HOSTS
 ```
+
+### 3.5 离线 / 内网部署（推荐分发方式）
+
+在能上网的机器上预先打包，然后拷到目标机一键解压安装：
+
+```bash
+# 制作包（含所有 deb / wheels / 已 build 前端）
+sudo bash deploy/package.sh --with-debs --with-wheels --with-frontend
+
+# 目标机
+tar xzf pemanager-<version>.tar.gz && cd pemanager-<version>
+sudo bash INSTALL.sh --offline                            # 完全离线
+sudo bash INSTALL.sh --offline --ssl-ip                   # 自签名 HTTPS
+sudo bash INSTALL.sh --offline --ssl-domain pe.example.com  # 离线安装 + 在线申请证书
+```
+
+详细参数与离线包组成见 [package.md](./package.md)。
 
 ---
 
@@ -218,14 +265,45 @@ sudo systemctl restart pemanager-backend pemanager-monitor
 
 ---
 
-## 6. 启用 HTTPS（Let's Encrypt）
+## 6. 启用 HTTPS
+
+PE Manager 自带 `deploy/ssl-setup.sh` 脚本，覆盖两种典型场景：
+
+### 6.1 域名场景（Let's Encrypt 免费证书 + 自动续期）
 
 ```bash
-sudo apt install certbot python3-certbot-nginx
-sudo certbot --nginx -d pe.example.com
+sudo bash deploy/ssl-setup.sh --domain pe.example.com --email admin@example.com
+# 测试不消耗速率限制：
+sudo bash deploy/ssl-setup.sh --domain pe.example.com --staging
 ```
 
-certbot 会自动在 `/etc/nginx/sites-available/pemanager.conf` 追加 443 server 块、80→443 跳转，并装好自动续期 cron。
+- 走 `certbot --webroot`（不抢占 nginx 80 流量）
+- 自动启用 `certbot.timer`（每日两次检查、剩余 < 30 天才会真签）
+- `/etc/letsencrypt/renewal-hooks/deploy/pemanager-reload-nginx.sh` 续期成功后会自动 `reload nginx`
+- 老系统无 `certbot.timer` 时退化为 `/etc/cron.d/pemanager-certbot` 每日 03:00 续期
+
+### 6.2 IP 场景（无域名 / 内网）
+
+```bash
+sudo bash deploy/ssl-setup.sh --ip                # 自动取本机首个 IPv4
+sudo bash deploy/ssl-setup.sh --ip 1.2.3.4
+sudo bash deploy/ssl-setup.sh --ip 1.2.3.4,fd00::1   # 多 IP / IPv6
+```
+
+- 使用 OpenSSL 生成 **10 年自签名证书**，路径 `/etc/pemanager/ssl/`
+- 所有 IP 写入 `subjectAltName`，避免 SAN mismatch
+- 浏览器首次访问需「手工信任」；可分发 `cert.pem` 到客户端导入
+
+### 6.3 状态查询 / 续期 / 重签
+
+```bash
+sudo bash deploy/ssl-setup.sh --status                 # 查看监听 / 证书 / timer
+sudo bash deploy/ssl-setup.sh --renew                  # 触发一次续期检查
+sudo bash deploy/ssl-setup.sh --domain pe.example.com --force   # 强制重签
+sudo bash deploy/ssl-setup.sh --ip 1.2.3.4 --force              # 自签名重签
+```
+
+详见 [ssl.md](./ssl.md)。
 
 ---
 

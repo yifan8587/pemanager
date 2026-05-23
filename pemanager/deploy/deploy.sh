@@ -15,10 +15,14 @@
 #   10) 健康检查
 #
 # 使用：
-#   sudo bash deploy/deploy.sh                  # 全量首次部署
-#   sudo bash deploy/deploy.sh --update         # 只更新代码/依赖/前端（不动 env / nginx）
-#   sudo bash deploy/deploy.sh --src /path/src  # 指定源码根（默认为脚本所在仓库）
-#   sudo bash deploy/deploy.sh --host 1.2.3.4   # 追加 ALLOWED_HOSTS
+#   sudo bash deploy/deploy.sh                            # 全量首次部署（HTTP）
+#   sudo bash deploy/deploy.sh --update                   # 只更新代码/依赖/前端（不动 env / nginx）
+#   sudo bash deploy/deploy.sh --src /path/src            # 指定源码根（默认为脚本所在仓库）
+#   sudo bash deploy/deploy.sh --host 1.2.3.4             # 追加 ALLOWED_HOSTS
+#   sudo bash deploy/deploy.sh --ssl-domain pe.example.com [--ssl-email a@b.com]
+#                                                          # 部署完成后用 Let's Encrypt 启用 HTTPS + 自动续期
+#   sudo bash deploy/deploy.sh --ssl-ip [1.2.3.4]         # 部署完成后用自签名 SSL 启用 HTTPS（IP 场景）
+#   sudo bash deploy/deploy.sh --skip-setup-check         # 跳过 setup.sh 预检
 # =============================================================================
 
 set -Eeuo pipefail
@@ -51,11 +55,26 @@ NGINX_SITE_ENAB="/etc/nginx/sites-enabled/pemanager.conf"
 SRC_DIR="$SRC_DEFAULT"
 UPDATE_ONLY=0
 EXTRA_HOST=""
+SSL_DOMAIN=""
+SSL_EMAIL=""
+SSL_IP=""
+SSL_IP_PROVIDED=0
+SKIP_SETUP_CHECK=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --update) UPDATE_ONLY=1 ;;
         --src)    SRC_DIR="$2"; shift ;;
         --host)   EXTRA_HOST="$2"; shift ;;
+        --ssl-domain) SSL_DOMAIN="$2"; shift ;;
+        --ssl-email)  SSL_EMAIL="$2"; shift ;;
+        --ssl-ip)
+            SSL_IP_PROVIDED=1
+            # 可选参数；下一个 token 若不是 -- 开头视为 IP 列表
+            if [[ $# -ge 2 && "$2" != --* && "$2" != "" ]]; then
+                SSL_IP="$2"; shift
+            fi
+            ;;
+        --skip-setup-check) SKIP_SETUP_CHECK=1 ;;
         -h|--help)
             grep -E '^# (使用|参数|该脚本)' "$0" | sed 's/^# //'
             exit 0
@@ -64,6 +83,22 @@ while [[ $# -gt 0 ]]; do
     esac
     shift
 done
+
+if [[ -n "$SSL_DOMAIN" && $SSL_IP_PROVIDED -eq 1 ]]; then
+    err "--ssl-domain 与 --ssl-ip 互斥，请二选一"
+    exit 2
+fi
+
+# 部署前先跑一次环境检查（除非显式跳过）
+if [[ $SKIP_SETUP_CHECK -ne 1 ]]; then
+    if [[ -x "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/setup.sh" ]]; then
+        log "运行 setup.sh 预检（如版本不达标会自动升级）"
+        bash "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/setup.sh" --yes || {
+            err "setup.sh 预检失败，请先修复后再 deploy"
+            exit 1
+        }
+    fi
+fi
 
 # ----- root -----
 if [[ $EUID -ne 0 ]]; then
@@ -131,18 +166,22 @@ deactivate
 ok "Python 依赖安装完成"
 
 # ============================================================================
-# 4. 前端 build
+# 4. 前端 build（离线包带 dist 时可跳过）
 # ============================================================================
-log "[4/10] 前端依赖与构建"
-pushd "${INSTALL_DIR}/frontend" >/dev/null
-if [[ -f package-lock.json ]]; then
-    npm ci --no-audit --no-fund
+if [[ "${PEMANAGER_SKIP_FRONTEND_BUILD:-0}" == "1" && -d "${INSTALL_DIR}/frontend/dist" ]]; then
+    log "[4/10] 检测到已 build 的 frontend/dist + PEMANAGER_SKIP_FRONTEND_BUILD=1，跳过 npm install/build"
 else
-    npm install --no-audit --no-fund
+    log "[4/10] 前端依赖与构建"
+    pushd "${INSTALL_DIR}/frontend" >/dev/null
+    if [[ -f package-lock.json ]]; then
+        npm ci --no-audit --no-fund
+    else
+        npm install --no-audit --no-fund
+    fi
+    npm run build
+    popd >/dev/null
 fi
-npm run build
-popd >/dev/null
-ok "前端 dist 已生成：${INSTALL_DIR}/frontend/dist"
+ok "前端 dist 已就绪：${INSTALL_DIR}/frontend/dist"
 
 # ============================================================================
 # 5. 环境配置文件
@@ -279,6 +318,30 @@ else
     warn "GET / → ${FRONT_CODE}（可能 nginx 端口被占或 SELinux 拦截）"
 fi
 
+# ============================================================================
+# 11. 可选：启用 HTTPS（Let's Encrypt 域名 / IP 自签名）
+# ============================================================================
+SSL_ENABLED=0
+if [[ -n "$SSL_DOMAIN" ]]; then
+    log "[11/11] 启用 HTTPS（Let's Encrypt：${SSL_DOMAIN}）"
+    SSL_ARGS=(--domain "$SSL_DOMAIN" --force)
+    [[ -n "$SSL_EMAIL" ]] && SSL_ARGS+=(--email "$SSL_EMAIL")
+    bash "${INSTALL_DIR}/deploy/ssl-setup.sh" "${SSL_ARGS[@]}" || {
+        warn "ssl-setup.sh 失败；HTTPS 未启用，可后续手动执行：sudo bash ${INSTALL_DIR}/deploy/ssl-setup.sh --domain ${SSL_DOMAIN}"
+    }
+    SSL_ENABLED=1
+elif [[ $SSL_IP_PROVIDED -eq 1 ]]; then
+    log "[11/11] 启用 HTTPS（自签名 IP）"
+    SSL_ARGS=(--ip)
+    [[ -n "$SSL_IP" ]] && SSL_ARGS+=("$SSL_IP")
+    bash "${INSTALL_DIR}/deploy/ssl-setup.sh" "${SSL_ARGS[@]}" || {
+        warn "ssl-setup.sh 失败；HTTPS 未启用，可后续手动执行：sudo bash ${INSTALL_DIR}/deploy/ssl-setup.sh --ip"
+    }
+    SSL_ENABLED=1
+else
+    log "未启用 HTTPS（HTTP 80）。如需 HTTPS 请加 --ssl-domain <fqdn> 或 --ssl-ip [<addr>]"
+fi
+
 echo
 ok "==== 部署完成 ===="
 echo
@@ -293,7 +356,20 @@ ADM_P=$(grep '^PEMANAGER_ADMIN_PASSWORD=' "$ENV_FILE" | cut -d= -f2-)
 echo "  用户名：${ADM_U:-admin}"
 echo "  密  码：${ADM_P:-admin123}"
 echo
-echo "访问地址：http://<本机IP>/    （API：http://<本机IP>/api/）"
+if [[ $SSL_ENABLED -eq 1 ]]; then
+    if [[ -n "$SSL_DOMAIN" ]]; then
+        echo "访问地址：https://${SSL_DOMAIN}/    （API：https://${SSL_DOMAIN}/api/）"
+        echo "续期管理：sudo bash ${INSTALL_DIR}/deploy/ssl-setup.sh --status / --renew"
+    else
+        echo "访问地址：https://<本机IP>/    （已使用自签名证书；浏览器需手工信任）"
+        echo "证书路径：/etc/pemanager/ssl/cert.pem"
+    fi
+else
+    echo "访问地址：http://<本机IP>/    （API：http://<本机IP>/api/）"
+fi
 echo
 echo "下次更新（仅同步代码、不动配置）："
-echo "  sudo bash deploy/deploy.sh --update"
+echo "  sudo bash ${INSTALL_DIR}/deploy/deploy.sh --update"
+echo "启用 HTTPS："
+echo "  sudo bash ${INSTALL_DIR}/deploy/ssl-setup.sh --domain <fqdn> [--email a@b.com]"
+echo "  sudo bash ${INSTALL_DIR}/deploy/ssl-setup.sh --ip [<addr1,addr2>]"

@@ -1,6 +1,10 @@
+## PE Manager — 后端运行时依赖（与项目根的 requirements.txt 保持一致）
+
 django>=5.0,<6
 djangorestframework>=3.14
 djangorestframework-simplejwt>=5.3
 django-cors-headers>=4.0
 PyYAML>=6.0
 python-wireguard>=0.2.2
+# 部署阶段必须
+gunicorn>=21.2

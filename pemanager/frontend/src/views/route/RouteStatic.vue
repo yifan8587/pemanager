@@ -42,6 +42,15 @@ const ipChoices = ref([])
 const liveIfaces = ref([])
 const dbIfnameSet = ref(new Set())
 const customers = ref([])
+// 隧道意图：用于按客户过滤接口、推断 PtP 对端 IP 自动填入 via
+const tunnels = ref([])
+const tunnelByIfname = computed(() => {
+  const m = new Map()
+  for (const t of tunnels.value || []) {
+    if (t?.ifname) m.set(t.ifname, t)
+  }
+  return m
+})
 
 // ===== 系统路由 =====
 const systemSnap = ref({ ok: false, routes: [], stderr: '' })
@@ -136,16 +145,28 @@ function fillFromLiveIface(ifname) {
   const row = liveIfaces.value.find((x) => x.ifname === ifname)
   if (!row) {
     form.linked_interface = dbIfnameSet.value.has(ifname) ? ifname : null
-    return
-  }
-  form.interface_name = ifname
-  const sec = row.netplan && row.netplan.section
-  if (sec && deviceClassOptions.some((o) => o.value === sec)) {
-    form.netplan_device_class = sec
   } else {
-    form.netplan_device_class = kindToNetplanClass(row.kind)
+    form.interface_name = ifname
+    const sec = row.netplan && row.netplan.section
+    if (sec && deviceClassOptions.some((o) => o.value === sec)) {
+      form.netplan_device_class = sec
+    } else {
+      form.netplan_device_class = kindToNetplanClass(row.kind)
+    }
+    form.linked_interface = dbIfnameSet.value.has(ifname) ? ifname : null
   }
-  form.linked_interface = dbIfnameSet.value.has(ifname) ? ifname : null
+  // 自动建议 PtP 对端 IP 作为下一跳：仅在 via 为空时填，避免覆盖用户输入
+  const t = tunnelByIfname.value.get(ifname)
+  if (t && t.peer_ip && !((form.gateway || '').trim())) {
+    form.gateway = t.peer_ip
+    if (!form.on_link) form.on_link = true
+    // 隧道意图统一归类为 tunnels（行内 select 仍可手动改）
+    form.netplan_device_class = 'tunnels'
+  }
+  // 没填客户时也跟随接口意图自动带上
+  if (t && t.customer_code && !form.customer) {
+    form.customer = t.customer_code
+  }
 }
 
 function onLiveIfacePicked(ifname) {
@@ -329,8 +350,11 @@ const selectedIds = computed(() => selectedRows.value.map((r) => r.id))
 const selectedHasWg = computed(() => selectedRows.value.some((r) => r.is_wireguard))
 const selectedHasNonWg = computed(() => selectedRows.value.some((r) => !r.is_wireguard))
 
+// 选择性下发时是否同步写入 netplan 片段实现持久化（不执行 try/apply，避免影响其它接口）
+const selectivePersist = ref(true)
+
 async function applyPhase(phase, confirmText, opts = {}) {
-  const { ids = null } = opts
+  const { ids = null, persist = false } = opts
   try {
     await ElMessageBox.confirm(confirmText, '操作确认', { type: 'warning' })
   } catch {
@@ -340,10 +364,17 @@ async function applyPhase(phase, confirmText, opts = {}) {
   lastApplyResult.value = null
   try {
     const payload = ids && ids.length ? { phase, ids } : { phase }
+    if (ids && ids.length && persist) payload.persist_to_netplan = true
     const { data } = await routeApi.applyRoutesToSystem(payload)
     lastApplyResult.value = data
     if (data.ok) {
-      if (phase === 'validate') {
+      if (ids && ids.length) {
+        deployActiveStep.value = 1
+        const persistTip = data.netplan_persist
+          ? (data.netplan_persist.ok ? '；已持久化到 netplan' : '；netplan 持久化失败')
+          : ''
+        ElMessage.success(`已即时下发选中路由 ${data.applied?.length || 0} 条${persistTip}`)
+      } else if (phase === 'validate') {
         deployActiveStep.value = 1
         ElMessage.success('已写入片段并完成 netplan generate')
       } else if (phase === 'try') {
@@ -473,6 +504,14 @@ async function loadLiveIfaces() {
   }
 }
 
+async function loadTunnels() {
+  try {
+    tunnels.value = await interfaceApi.listDesiredTunnels()
+  } catch {
+    tunnels.value = []
+  }
+}
+
 async function loadDbIfaces() {
   try {
     const list = await interfaceApi.listDbInterfaces()
@@ -489,6 +528,7 @@ function refreshAll() {
   loadLiveIfaces()
   loadDbIfaces()
   loadCustomers()
+  loadTunnels()
 }
 
 onMounted(() => {
@@ -554,10 +594,22 @@ onMounted(() => {
 
         <div class="sel-bar" v-if="selectedRows.length">
           <el-tag type="info">已选 {{ selectedRows.length }} 条</el-tag>
+          <el-checkbox v-model="selectivePersist" size="small">
+            写入 netplan 持久化
+          </el-checkbox>
           <el-button
             v-if="selectedHasNonWg"
             type="success" size="small" :loading="applying"
-            @click="applyPhase('full', `仅对选中的 ${selectedRows.filter((r) => !r.is_wireguard).length} 条非 WireGuard 路由使用 \`ip route replace\` 即时下发，不写 netplan，不影响其他路由。继续？`, { ids: selectedRows.filter((r) => !r.is_wireguard).map((r) => r.id) })"
+            @click="applyPhase(
+              'full',
+              `仅对选中的 ${selectedRows.filter((r) => !r.is_wireguard).length} 条非 WireGuard 路由使用 \`ip route replace\` 即时下发，` +
+              (selectivePersist ? '并在内核生效后追加 netplan 片段写入+generate（不执行 try）以确保重启后仍生效。' : '不写 netplan，重启后不再生效。') +
+              '继续？',
+              {
+                ids: selectedRows.filter((r) => !r.is_wireguard).map((r) => r.id),
+                persist: selectivePersist,
+              }
+            )"
           >即时下发选中（非 WG）</el-button>
           <el-button
             v-if="selectedHasWg"
@@ -569,7 +621,7 @@ onMounted(() => {
         <el-alert
           v-if="selectedRows.length"
           type="info" show-icon :closable="false"
-          title="即时下发选中（非 WG）仅用 ip route replace，不触发 netplan generate/try；下发选中 WG 路由仅对所选接口 wg-quick down → up，避免一次性中断全部业务。"
+          title="即时下发选中（非 WG）只用 ip route replace；勾选「写入 netplan 持久化」后会额外写片段 + netplan generate（不调 try/apply），重启后仍生效，且不影响其它接口运行状态。WG 路由仅对所选接口 wg-quick down → up。"
           style="margin: 6px 0"
         />
         <el-table
@@ -876,10 +928,25 @@ onMounted(() => {
           </el-input>
         </el-form-item>
         <el-form-item label="下一跳 (via)">
-          <el-input v-model="form.gateway" placeholder="可选" :disabled="form.on_link" />
+          <el-input
+            v-model="form.gateway"
+            :placeholder="tunnelByIfname.get(form.interface_name)?.peer_ip
+              ? '建议：' + tunnelByIfname.get(form.interface_name).peer_ip + '（已从接口意图推断对端 IP）'
+              : '可选；可与 on-link 同时使用'"
+          />
+          <span
+            v-if="tunnelByIfname.get(form.interface_name)?.peer_ip
+              && form.gateway === tunnelByIfname.get(form.interface_name).peer_ip"
+            class="muted hint"
+          >
+            已自动填入对端 PtP IP；如需修改可直接覆盖
+          </span>
         </el-form-item>
         <el-form-item label="on-link">
           <el-switch v-model="form.on_link" />
+          <span class="muted hint">
+            勾选后，即便 via 与出接口不在同一直连子网，也会以 onlink 强制下发；典型如 PtP 隧道。
+          </span>
         </el-form-item>
         <el-form-item label="metric">
           <el-input-number v-model="form.metric" :min="0" :max="4294967295" controls-position="right" />
@@ -940,6 +1007,7 @@ onMounted(() => {
   font-size: 12px;
 }
 .muted { color: var(--pe-text-mute); }
+.hint { margin-left: 8px; font-size: 12px; color: var(--pe-text-mute); }
 .sel-bar { display: flex; gap: 8px; align-items: center; padding: 6px 0; }
 .cust { font-weight: 500; }
 .ipline { color: var(--pe-text-mute); font-size: 11px; }

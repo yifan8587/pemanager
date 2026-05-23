@@ -1,0 +1,1022 @@
+<script setup>
+import { computed, onMounted, reactive, ref } from 'vue'
+import { ElMessage, ElMessageBox } from 'element-plus'
+import { Share, Refresh, Upload, View, Plus } from '@element-plus/icons-vue'
+import { interfaceApi } from '../../api/interfaceApi'
+import { routeApi } from '../../api/routeApi'
+import { resourceApi } from '../../api/resourceApi'
+import PageHeader from '../../components/PageHeader.vue'
+
+const activeTab = ref('intent')
+
+// ===== 意图列表 =====
+const rows = ref([])
+const loading = ref(false)
+const intentFilter = ref('all') // all | static | wireguard
+const intentSearch = ref('')
+
+const filteredRows = computed(() => {
+  const kw = (intentSearch.value || '').trim().toLowerCase()
+  return rows.value.filter((r) => {
+    if (intentFilter.value === 'static' && r.is_wireguard) return false
+    if (intentFilter.value === 'wireguard' && !r.is_wireguard) return false
+    if (!kw) return true
+    return (
+      (r.interface_name || '').toLowerCase().includes(kw) ||
+      (r.dest_cidr || '').toLowerCase().includes(kw) ||
+      (r.gateway || '').toLowerCase().includes(kw) ||
+      (r.customer_name || '').toLowerCase().includes(kw) ||
+      (r.customer_code || '').toLowerCase().includes(kw)
+    )
+  })
+})
+
+const stats = computed(() => {
+  const total = rows.value.length
+  const wg = rows.value.filter((r) => r.is_wireguard).length
+  return { total, static: total - wg, wg }
+})
+
+// ===== 联动数据 =====
+const ipChoices = ref([])
+const liveIfaces = ref([])
+const dbIfnameSet = ref(new Set())
+const customers = ref([])
+
+// ===== 系统路由 =====
+const systemSnap = ref({ ok: false, routes: [], stderr: '' })
+const loadingSystem = ref(false)
+const systemTable = ref('')
+const tablePresets = [
+  { value: '', label: 'main（默认）' },
+  { value: 'all', label: 'all（所有表）' },
+  { value: 'local', label: 'local' },
+]
+
+const sysSearch = ref('')
+const sysFilteredRoutes = computed(() => {
+  const kw = (sysSearch.value || '').trim().toLowerCase()
+  if (!kw) return systemSnap.value.routes || []
+  return (systemSnap.value.routes || []).filter((r) => {
+    return (
+      (r.dst || '').toLowerCase().includes(kw) ||
+      (r.dev || '').toLowerCase().includes(kw) ||
+      (r.gateway || '').toLowerCase().includes(kw) ||
+      (r.protocol || '').toLowerCase().includes(kw)
+    )
+  })
+})
+
+// ===== 表单 =====
+const dlg = ref(false)
+const saving = ref(false)
+const editingId = ref(null)
+const liveIfacePick = ref('')
+
+const form = reactive({
+  interface_name: '',
+  netplan_device_class: 'ethernets',
+  linked_interface: null,
+  dest_cidr: '',
+  gateway: '',
+  on_link: false,
+  metric: null,
+  route_table: null,
+  ip_allocation: null,
+  customer: null,
+  remark: '',
+})
+
+const deviceClassOptions = [
+  { value: 'ethernets', label: 'ethernets · 物理网卡' },
+  { value: 'tunnels', label: 'tunnels · 隧道（GRE/VXLAN/WG）' },
+  { value: 'bridges', label: 'bridges · 桥' },
+  { value: 'vlans', label: 'vlans · VLAN' },
+  { value: 'bonds', label: 'bonds · 绑定' },
+  { value: 'wifis', label: 'wifis · 无线' },
+]
+
+const title = computed(() => (editingId.value ? '编辑路由表' : '新增路由表'))
+
+const filteredIpChoices = computed(() => {
+  const ifn = (form.interface_name || '').trim()
+  if (!ifn) return ipChoices.value
+  return ipChoices.value.filter((x) => !x.interface_code || x.interface_code === ifn)
+})
+
+const pickedIfaceKind = computed(() => {
+  const ifn = (form.interface_name || '').trim()
+  if (!ifn) return ''
+  const row = liveIfaces.value.find((x) => x.ifname === ifn)
+  return row?.kind || ''
+})
+
+const pickedIsWg = computed(() => String(pickedIfaceKind.value || '').toLowerCase() === 'wireguard')
+
+function kindToNetplanClass(kind) {
+  const k = String(kind || '').toLowerCase()
+  const tunnels = new Set([
+    'wireguard', 'vxlan', 'gre', 'gretap', 'erspan', 'ip6gre', 'ip6gretap',
+    'ip_gre', 'ipip', 'sit', 'ip6tnl', 'vti', 'vti6', 'tunnel', 'geneve',
+  ])
+  if (tunnels.has(k)) return 'tunnels'
+  if (k === 'bridge') return 'bridges'
+  if (k === 'bond') return 'bonds'
+  if (k === 'vlan' || k === 'macvlan' || k === 'ipvlan') return 'vlans'
+  if (k === 'wlan' || k === 'wifi') return 'wifis'
+  return 'ethernets'
+}
+
+function fillFromLiveIface(ifname) {
+  if (!ifname) {
+    form.linked_interface = null
+    return
+  }
+  liveIfacePick.value = ifname
+  const row = liveIfaces.value.find((x) => x.ifname === ifname)
+  if (!row) {
+    form.linked_interface = dbIfnameSet.value.has(ifname) ? ifname : null
+    return
+  }
+  form.interface_name = ifname
+  const sec = row.netplan && row.netplan.section
+  if (sec && deviceClassOptions.some((o) => o.value === sec)) {
+    form.netplan_device_class = sec
+  } else {
+    form.netplan_device_class = kindToNetplanClass(row.kind)
+  }
+  form.linked_interface = dbIfnameSet.value.has(ifname) ? ifname : null
+}
+
+function onLiveIfacePicked(ifname) {
+  if (!ifname) {
+    form.linked_interface = null
+    return
+  }
+  fillFromLiveIface(ifname)
+}
+
+function onManualIfaceInput() {
+  const ifn = (form.interface_name || '').trim()
+  form.linked_interface = ifn && dbIfnameSet.value.has(ifn) ? ifn : null
+}
+
+function resetForm() {
+  liveIfacePick.value = ''
+  form.interface_name = ''
+  form.netplan_device_class = 'ethernets'
+  form.linked_interface = null
+  form.dest_cidr = ''
+  form.gateway = ''
+  form.on_link = false
+  form.metric = null
+  form.route_table = null
+  form.ip_allocation = null
+  form.customer = null
+  form.remark = ''
+}
+
+function openCreate() {
+  editingId.value = null
+  resetForm()
+  dlg.value = true
+}
+
+function openEdit(row) {
+  editingId.value = row.id
+  liveIfacePick.value = row.interface_name || ''
+  form.interface_name = row.interface_name
+  form.netplan_device_class = row.netplan_device_class || 'ethernets'
+  form.linked_interface = row.linked_interface || null
+  form.dest_cidr = row.dest_cidr
+  form.gateway = row.gateway || ''
+  form.on_link = Boolean(row.on_link)
+  form.metric = row.metric ?? null
+  form.route_table = row.route_table ?? null
+  form.ip_allocation = row.ip_allocation
+  form.customer = row.customer || row.customer_code || null
+  form.remark = row.remark || ''
+  dlg.value = true
+}
+
+function onPickIp(id) {
+  if (!id) return
+  const row = ipChoices.value.find((x) => x.id === id)
+  if (row?.interface_code) {
+    const code = row.interface_code.trim()
+    form.interface_name = code
+    fillFromLiveIface(code)
+  }
+}
+
+function buildBody() {
+  const body = {
+    interface_name: (form.interface_name || '').trim(),
+    netplan_device_class: form.netplan_device_class,
+    dest_cidr: (form.dest_cidr || '').trim(),
+    on_link: form.on_link,
+    remark: (form.remark || '').trim(),
+  }
+  body.gateway = (form.gateway || '').trim() || null
+  body.metric = form.metric != null && form.metric !== '' ? Number(form.metric) : null
+  body.route_table = form.route_table != null && form.route_table !== '' ? Number(form.route_table) : null
+  body.ip_allocation = form.ip_allocation || null
+  body.linked_interface = form.linked_interface || null
+  body.customer = form.customer || null
+  return body
+}
+
+async function save() {
+  if (!((form.interface_name || '').trim())) {
+    ElMessage.error('请填写接口名或从实时清单选择接口')
+    return
+  }
+  if (!((form.dest_cidr || '').trim())) {
+    ElMessage.error('请填写目标网段或 default')
+    return
+  }
+  saving.value = true
+  try {
+    const body = buildBody()
+    if (editingId.value) {
+      await routeApi.patchDesiredRoute(editingId.value, body)
+      ElMessage.success('已更新')
+    } else {
+      await routeApi.createDesiredRoute(body)
+      ElMessage.success('已保存')
+    }
+    dlg.value = false
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '保存失败')
+  } finally {
+    saving.value = false
+  }
+}
+
+async function remove(row) {
+  try {
+    await ElMessageBox.confirm(
+      `删除路由表 ${row.interface_name} → ${row.dest_cidr}？`,
+      '确认删除',
+      { type: 'warning' },
+    )
+  } catch {
+    return
+  }
+  try {
+    await routeApi.deleteDesiredRoute(row.id)
+    ElMessage.success('已删除')
+    await load()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '删除失败')
+  }
+}
+
+async function loadSystemRoutes() {
+  loadingSystem.value = true
+  try {
+    systemSnap.value = await routeApi.listSystemRoutes(
+      systemTable.value ? { table: systemTable.value } : {},
+    )
+    if (!systemSnap.value?.ok) {
+      ElMessage.warning(systemSnap.value?.stderr || '读取内核路由表失败（需 ip 命令权限）')
+    }
+  } catch (e) {
+    systemSnap.value = { ok: false, routes: [], stderr: e?.message || '' }
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载系统路由失败')
+  } finally {
+    loadingSystem.value = false
+  }
+}
+
+// ===== 下发：非 WG（netplan）=====
+const previewYaml = ref('')
+const previewWarnings = ref([])
+const loadingPreview = ref(false)
+const applying = ref(false)
+const deployActiveStep = ref(0)
+const lastApplyResult = ref(null)
+
+async function fetchPreviewYaml() {
+  loadingPreview.value = true
+  try {
+    const data = await routeApi.previewRouteYaml()
+    if (data.ok) {
+      previewYaml.value = data.yaml || ''
+      previewWarnings.value = data.warnings || []
+      deployActiveStep.value = 0
+      ElMessage.success('已生成 netplan 片段预览')
+    } else {
+      previewYaml.value = ''
+      previewWarnings.value = []
+      ElMessage.error(data.error || '预览失败')
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    previewYaml.value = ''
+    ElMessage.error(d ? JSON.stringify(d) : e.message || '预览请求失败')
+  } finally {
+    loadingPreview.value = false
+  }
+}
+
+// 多选状态（用于"下发选中"按钮）
+const selectedRows = ref([])
+function onSelectionChange(rs) { selectedRows.value = rs || [] }
+const selectedIds = computed(() => selectedRows.value.map((r) => r.id))
+const selectedHasWg = computed(() => selectedRows.value.some((r) => r.is_wireguard))
+const selectedHasNonWg = computed(() => selectedRows.value.some((r) => !r.is_wireguard))
+
+async function applyPhase(phase, confirmText, opts = {}) {
+  const { ids = null } = opts
+  try {
+    await ElMessageBox.confirm(confirmText, '操作确认', { type: 'warning' })
+  } catch {
+    return
+  }
+  applying.value = true
+  lastApplyResult.value = null
+  try {
+    const payload = ids && ids.length ? { phase, ids } : { phase }
+    const { data } = await routeApi.applyRoutesToSystem(payload)
+    lastApplyResult.value = data
+    if (data.ok) {
+      if (phase === 'validate') {
+        deployActiveStep.value = 1
+        ElMessage.success('已写入片段并完成 netplan generate')
+      } else if (phase === 'try') {
+        deployActiveStep.value = 2
+        ElMessage.success('netplan try 已执行')
+      } else {
+        deployActiveStep.value = 2
+        ElMessage.success('全流程已完成')
+      }
+    } else {
+      await ElMessageBox.alert(
+        `<pre style="white-space:pre-wrap;font-size:12px;max-height:420px;overflow:auto">${JSON.stringify(data, null, 2)}</pre>`,
+        '下发失败',
+        { dangerouslyUseHTMLString: true },
+      )
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    lastApplyResult.value = d
+    await ElMessageBox.alert(
+      `<pre style="white-space:pre-wrap;font-size:12px">${JSON.stringify(d || e.message, null, 2)}</pre>`,
+      '请求失败',
+      { dangerouslyUseHTMLString: true },
+    )
+  } finally {
+    applying.value = false
+  }
+}
+
+// ===== 下发：WG（PostUp/PostDown 写入 /etc/wireguard/<if>.conf + wg-quick down/up）=====
+const wgPreview = ref({ interfaces: [], total_count: 0, managed_interfaces: 0 })
+const loadingWgPreview = ref(false)
+const wgApplying = ref(false)
+const lastWgResult = ref(null)
+
+async function fetchWgPreview() {
+  loadingWgPreview.value = true
+  try {
+    const data = await routeApi.previewWireguardRoutes()
+    wgPreview.value = data || { interfaces: [] }
+    ElMessage.success(
+      `已生成 WG 路由块预览（${data?.managed_interfaces || 0} 个接口 / ${data?.total_count || 0} 条路由）`,
+    )
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '预览失败')
+  } finally {
+    loadingWgPreview.value = false
+  }
+}
+
+async function applyWg(opts = {}) {
+  const { ids = null } = opts
+  const tip = ids && ids.length
+    ? `仅对选中路由所属的 WG 接口执行 wg-quick down → up（${ids.length} 条），不影响其他接口业务。继续？`
+    : 'WireGuard 路由下发流程：\n' +
+      '  1) 把路由意图写到 /etc/wireguard/<if>.conf 的 PostUp/PostDown 托管块\n' +
+      '  2) 对每个 WG 接口执行 wg-quick down → wg-quick up 重建接口\n' +
+      '执行期间接口会短暂中断，是否继续？'
+  try {
+    await ElMessageBox.confirm(tip, 'WireGuard 路由下发', { type: 'warning' })
+  } catch {
+    return
+  }
+  wgApplying.value = true
+  lastWgResult.value = null
+  try {
+    const payload = ids && ids.length ? { ids } : {}
+    const { data } = await routeApi.applyWireguardRoutes(payload)
+    lastWgResult.value = data
+    if (data.ok) {
+      const ifs = (data.applied_interfaces || []).join(', ') || '(无)'
+      ElMessage.success(`WireGuard 路由已下发；重建接口：${ifs}`)
+    } else {
+      await ElMessageBox.alert(
+        `<pre style="white-space:pre-wrap;font-size:12px;max-height:420px;overflow:auto">${JSON.stringify(data, null, 2)}</pre>`,
+        '下发失败',
+        { dangerouslyUseHTMLString: true },
+      )
+    }
+  } catch (e) {
+    const d = e?.response?.data
+    lastWgResult.value = d
+    await ElMessageBox.alert(
+      `<pre style="white-space:pre-wrap;font-size:12px">${JSON.stringify(d || e.message, null, 2)}</pre>`,
+      '请求失败',
+      { dangerouslyUseHTMLString: true },
+    )
+  } finally {
+    wgApplying.value = false
+  }
+}
+
+// ===== 加载 =====
+async function load() {
+  loading.value = true
+  try {
+    rows.value = await routeApi.listDesiredRoutes()
+  } catch (e) {
+    ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
+  } finally {
+    loading.value = false
+  }
+}
+
+async function loadIpChoices() {
+  try {
+    ipChoices.value = await routeApi.listIpAllocationChoices()
+  } catch {
+    ipChoices.value = []
+  }
+}
+
+async function loadCustomers() {
+  try {
+    customers.value = await resourceApi.listCustomers()
+  } catch {
+    customers.value = []
+  }
+}
+
+async function loadLiveIfaces() {
+  try {
+    const { data } = await interfaceApi.liveInventory()
+    liveIfaces.value = data.interfaces || []
+  } catch {
+    liveIfaces.value = []
+  }
+}
+
+async function loadDbIfaces() {
+  try {
+    const list = await interfaceApi.listDbInterfaces()
+    dbIfnameSet.value = new Set((list || []).map((x) => x.ifname).filter(Boolean))
+  } catch {
+    dbIfnameSet.value = new Set()
+  }
+}
+
+function refreshAll() {
+  load()
+  loadSystemRoutes()
+  loadIpChoices()
+  loadLiveIfaces()
+  loadDbIfaces()
+  loadCustomers()
+}
+
+onMounted(() => {
+  refreshAll()
+})
+</script>
+
+<template>
+  <div class="page">
+    <PageHeader title="静态路由" description="维护静态路由表" :icon="Share">
+      <template #actions>
+        <el-button :icon="Refresh" @click="refreshAll" :loading="loading">刷新</el-button>
+        <el-button type="primary" :icon="Plus" @click="openCreate">新增路由</el-button>
+      </template>
+    </PageHeader>
+
+    <div class="kpi-row">
+      <div class="kpi">
+        <div class="kpi-label">路由表</div>
+        <div class="kpi-value">{{ stats.total }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">非 WireGuard</div>
+        <div class="kpi-value">{{ stats.static }}</div>
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">WireGuard 路由</div>
+        <div class="kpi-value">{{ stats.wg }}</div>
+
+      </div>
+      <div class="kpi">
+        <div class="kpi-label">系统路由总数 (main)</div>
+        <div class="kpi-value">{{ systemSnap.routes?.length || 0 }}</div>
+        <div class="kpi-hint" :class="systemSnap.ok ? 'ok' : 'err'">
+          {{ systemSnap.ok ? '在线' : '采集失败' }}
+        </div>
+      </div>
+    </div>
+
+    <el-tabs v-model="activeTab" type="border-card" class="route-tabs">
+      <!-- 路由表 -->
+      <el-tab-pane name="intent">
+        <template #label>
+          <span><el-icon><Share /></el-icon> 路由表</span>
+        </template>
+
+        <div class="toolbar">
+          <el-radio-group v-model="intentFilter" size="small">
+            <el-radio-button label="all">全部</el-radio-button>
+            <el-radio-button label="static">非 WireGuard</el-radio-button>
+            <el-radio-button label="wireguard">仅 WireGuard</el-radio-button>
+          </el-radio-group>
+          <el-input
+            v-model="intentSearch"
+            placeholder="搜索接口 / 目标 / 网关 / 客户"
+            clearable
+            size="small"
+            style="width: 260px"
+          />
+          <div class="spacer" />
+          <el-button :loading="loading" :icon="Refresh" @click="load">刷新</el-button>
+        </div>
+
+        <div class="sel-bar" v-if="selectedRows.length">
+          <el-tag type="info">已选 {{ selectedRows.length }} 条</el-tag>
+          <el-button
+            v-if="selectedHasNonWg"
+            type="success" size="small" :loading="applying"
+            @click="applyPhase('full', `仅对选中的 ${selectedRows.filter((r) => !r.is_wireguard).length} 条非 WireGuard 路由使用 \`ip route replace\` 即时下发，不写 netplan，不影响其他路由。继续？`, { ids: selectedRows.filter((r) => !r.is_wireguard).map((r) => r.id) })"
+          >即时下发选中（非 WG）</el-button>
+          <el-button
+            v-if="selectedHasWg"
+            type="warning" size="small" :loading="wgApplying"
+            @click="applyWg({ ids: selectedRows.filter((r) => r.is_wireguard).map((r) => r.id) })"
+          >下发选中 WG 路由</el-button>
+          <el-button size="small" @click="selectedRows = []">清除选择</el-button>
+        </div>
+        <el-alert
+          v-if="selectedRows.length"
+          type="info" show-icon :closable="false"
+          title="即时下发选中（非 WG）仅用 ip route replace，不触发 netplan generate/try；下发选中 WG 路由仅对所选接口 wg-quick down → up，避免一次性中断全部业务。"
+          style="margin: 6px 0"
+        />
+        <el-table
+          :data="filteredRows" border size="small" v-loading="loading" stripe
+          @selection-change="onSelectionChange"
+        >
+          <el-table-column type="selection" width="48" />
+          <el-table-column label="接口" width="160">
+            <template #default="{ row }">
+              <div class="if-cell">
+                <span class="if-name">{{ row.interface_name }}</span>
+                <el-tag v-if="row.is_wireguard" type="warning" size="small">WG</el-tag>
+                <el-tag v-else type="info" size="small">{{ row.netplan_device_class }}</el-tag>
+              </div>
+            </template>
+          </el-table-column>
+          <el-table-column label="目标 (to)" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code class="mono">{{ row.dest_cidr }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="下一跳 (via)" width="160">
+            <template #default="{ row }">
+              <code v-if="row.gateway" class="mono">{{ row.gateway }}</code>
+              <el-tag v-else-if="row.on_link" type="success" size="small">on-link</el-tag>
+              <span v-else>—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="metric" label="metric" width="80" />
+          <el-table-column prop="route_table" label="table" width="80" />
+          <el-table-column label="关联客户 / 资源 IP" min-width="220" show-overflow-tooltip>
+            <template #default="{ row }">
+              <div v-if="row.customer_code || row.ip_address">
+                <div v-if="row.customer_code" class="cust">
+                  <el-tag size="small" type="info">{{ row.customer_code }}</el-tag>
+                  <span style="margin-left: 4px">{{ row.customer_name }}</span>
+                </div>
+                <div v-if="row.ip_address" class="ipline mono">{{ row.ip_address }}</div>
+              </div>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column label="关联接口库" width="110">
+            <template #default="{ row }">
+              <el-tag v-if="row.linked_interface" type="success" size="small">{{ row.linked_interface }}</el-tag>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="remark" label="备注" show-overflow-tooltip />
+          <el-table-column label="操作" width="140" fixed="right">
+            <template #default="{ row }">
+              <el-button link type="primary" @click="openEdit(row)">编辑</el-button>
+              <el-button link type="danger" @click="remove(row)">删除</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
+
+      <!-- 系统路由表 -->
+      <el-tab-pane name="system">
+        <template #label>
+          <span><el-icon><View /></el-icon> 系统路由表</span>
+        </template>
+
+        <div class="toolbar">
+          <span class="lbl">路由表</span>
+          <el-select v-model="systemTable" style="width: 180px" size="small" @change="loadSystemRoutes">
+            <el-option v-for="o in tablePresets" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+          <el-input v-model="systemTable" placeholder="或自定义表名/ID" size="small" style="width: 200px" />
+          <el-button size="small" @click="loadSystemRoutes" :loading="loadingSystem" :icon="Refresh">查询</el-button>
+          <div class="spacer" />
+          <el-input v-model="sysSearch" placeholder="搜索 dst / dev / gw / proto" clearable size="small" style="width: 240px" />
+        </div>
+
+        <el-table
+          :data="sysFilteredRoutes"
+          border
+          size="small"
+          v-loading="loadingSystem"
+          empty-text="暂无数据或采集失败"
+          stripe
+        >
+          <el-table-column prop="dev" label="接口" width="120" />
+          <el-table-column label="目标" min-width="160" show-overflow-tooltip>
+            <template #default="{ row }">
+              <code class="mono">{{ row.dst }}</code>
+            </template>
+          </el-table-column>
+          <el-table-column label="下一跳" width="160">
+            <template #default="{ row }">
+              <code v-if="row.gateway" class="mono">{{ row.gateway }}</code>
+              <span v-else class="muted">—</span>
+            </template>
+          </el-table-column>
+          <el-table-column prop="prefsrc" label="prefsrc" width="140" />
+          <el-table-column prop="metric" label="metric" width="80" />
+          <el-table-column prop="table" label="table" width="80" />
+          <el-table-column prop="protocol" label="protocol" width="100" />
+          <el-table-column prop="scope" label="scope" width="80" />
+        </el-table>
+        <p v-if="!systemSnap.ok && systemSnap.stderr" class="err-note">{{ systemSnap.stderr }}</p>
+      </el-tab-pane>
+
+      <!-- 下发 -->
+      <el-tab-pane name="deploy">
+        <template #label>
+          <span><el-icon><Upload /></el-icon> 下发与回滚</span>
+        </template>
+
+        <el-row :gutter="16">
+          <el-col :xs="24" :md="14">
+            <el-card shadow="never" class="dep-card">
+              <template #header>
+                <div class="card-hd">
+                  <span class="title">A · 下发非 WG 路由（netplan）</span>
+                  <el-tag type="info" size="small">{{ stats.static }} 条</el-tag>
+                </div>
+              </template>
+
+              <el-steps :active="deployActiveStep" finish-status="success" align-center class="steps">
+                <el-step title="预览 YAML" description="根据意图生成 netplan 片段" />
+                <el-step title="写入并校验" description="落盘 + netplan generate" />
+                <el-step title="测试应用" description="netplan try（可回滚）" />
+              </el-steps>
+
+              <div class="deploy-actions">
+                <el-button :loading="loadingPreview" :icon="View" @click="fetchPreviewYaml">1. 预览</el-button>
+                <el-button
+                  type="warning"
+                  :loading="applying"
+                  @click="applyPhase('validate', '将写入路由片段并执行 netplan generate。是否继续？')"
+                >
+                  2. 写入 + generate
+                </el-button>
+                <el-button
+                  type="success"
+                  :loading="applying"
+                  @click="applyPhase('try', '将仅执行 netplan try（依赖上一步已写入的片段）。是否继续？')"
+                >
+                  3. netplan try
+                </el-button>
+                <el-button
+                  type="primary"
+                  :loading="applying"
+                  @click="applyPhase('full', '将写入片段、netplan generate 与 netplan try 一次完成。是否继续？')"
+                >
+                  一键全流程
+                </el-button>
+              </div>
+
+              <el-alert
+                v-for="(w, i) in previewWarnings"
+                :key="i"
+                :title="`${w.ifname || ''} (${w.section || ''})`"
+                type="warning"
+                :description="w.reason"
+                :closable="false"
+                show-icon
+                style="margin-bottom: 6px"
+              />
+
+              <el-form-item label="YAML 预览" class="yaml-wrap">
+                <el-input
+                  v-model="previewYaml"
+                  type="textarea"
+                  :rows="14"
+                  readonly
+                  placeholder="点击「预览」加载根据当前非 WG 意图合并后的 netplan 片段"
+                  class="mono"
+                />
+              </el-form-item>
+
+              <el-collapse v-if="lastApplyResult">
+                <el-collapse-item title="最近一次下发结果（raw）" name="1">
+                  <pre class="raw">{{ JSON.stringify(lastApplyResult, null, 2) }}</pre>
+                </el-collapse-item>
+              </el-collapse>
+            </el-card>
+          </el-col>
+
+          <el-col :xs="24" :md="10">
+            <el-card shadow="never" class="dep-card wg-card">
+              <template #header>
+                <div class="card-hd">
+                  <span class="title">B · 下发 WireGuard 路由（wg-quick）</span>
+                  <el-tag type="warning" size="small">{{ stats.wg }} 条 / {{ wgPreview.managed_interfaces || 0 }} 接口</el-tag>
+                </div>
+              </template>
+
+              <p class="hint">
+                WireGuard 路由不走 netplan：本模块在每个
+                <code>/etc/wireguard/&lt;if&gt;.conf</code> 的 [Interface] 段写入一组带标记的
+                <code>PostUp</code> / <code>PostDown</code>，然后执行
+                <code>wg-quick down &lt;if&gt; → wg-quick up &lt;if&gt;</code>
+                重建接口让路由生效。删除路由意图后再下发同样会自动从内核回收（接口会短暂中断）。
+              </p>
+
+              <div class="deploy-actions">
+                <el-button :icon="View" :loading="loadingWgPreview" @click="fetchWgPreview">1. 预览 conf 块</el-button>
+                <el-button type="primary" :loading="wgApplying" @click="applyWg">2. 下发 (wg-quick down/up)</el-button>
+              </div>
+
+              <div v-if="!(wgPreview.interfaces || []).length" class="muted small">
+                点击「预览 conf 块」查看每个 WireGuard 接口将写入的托管路由块。
+              </div>
+
+              <div
+                v-for="ifc in wgPreview.interfaces || []"
+                :key="ifc.ifname"
+                class="wg-iface"
+              >
+                <div class="wg-iface-hd">
+                  <el-tag size="small" type="warning">{{ ifc.ifname }}</el-tag>
+                  <code class="mono path">{{ ifc.conf_path }}</code>
+                  <el-tag v-if="!ifc.conf_exists" type="danger" size="small">conf 缺失</el-tag>
+                  <el-tag v-else type="info" size="small">{{ ifc.count }} 条路由</el-tag>
+                </div>
+                <pre class="wg-block mono">{{ ifc.block }}</pre>
+                <div class="wg-cmds mono">
+                  <span v-for="(c, i) in ifc.apply_cmds || []" :key="i">$ {{ c }}<br /></span>
+                </div>
+              </div>
+
+              <el-collapse v-if="lastWgResult">
+                <el-collapse-item title="最近一次 WG 路由下发结果" name="1">
+                  <pre class="raw">{{ JSON.stringify(lastWgResult, null, 2) }}</pre>
+                </el-collapse-item>
+              </el-collapse>
+            </el-card>
+          </el-col>
+        </el-row>
+      </el-tab-pane>
+    </el-tabs>
+
+    <!-- 编辑/新增 -->
+    <el-dialog v-model="dlg" :title="title" width="680px" destroy-on-close>
+      <el-form label-width="120px" label-position="right">
+        <el-form-item label="实时接口选择">
+          <el-select
+            v-model="liveIfacePick"
+            clearable
+            filterable
+            placeholder="可选：自动填接口名 / 设备类 / 库 FK"
+            style="width: 100%"
+            @change="onLiveIfacePicked"
+          >
+            <el-option
+              v-for="iface in liveIfaces"
+              :key="iface.ifname"
+              :label="`${iface.ifname} (${iface.kind || 'unknown'})`"
+              :value="iface.ifname"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联 IP">
+          <el-select
+            v-model="form.ip_allocation"
+            clearable
+            filterable
+            placeholder="与资源管理联动；自动对齐接口名"
+            style="width: 100%"
+            @change="onPickIp"
+          >
+            <el-option
+              v-for="ip in filteredIpChoices"
+              :key="ip.id"
+              :label="`${ip.address} (${ip.interface_code || '无接口标识'})`"
+              :value="ip.id"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关联客户">
+          <el-select
+            v-model="form.customer"
+            clearable filterable
+            placeholder="可选；仅用于业务关联与权限作用域，不会写入 netplan/ip route"
+            style="width: 100%"
+          >
+            <el-option
+              v-for="c in customers"
+              :key="c.code"
+              :label="`${c.code} - ${c.name}`"
+              :value="c.code"
+            />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="接口名" required>
+          <el-input v-model="form.interface_name" placeholder="如 eth0、wg01" @input="onManualIfaceInput">
+            <template #append>
+              <el-tag v-if="pickedIsWg" type="warning" size="small">WG · 走 ip route</el-tag>
+              <el-tag v-else-if="pickedIfaceKind" type="info" size="small">{{ pickedIfaceKind }}</el-tag>
+            </template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="netplan 设备类" required>
+          <el-select v-model="form.netplan_device_class" style="width: 100%">
+            <el-option v-for="o in deviceClassOptions" :key="o.value" :label="o.label" :value="o.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="目标 (to)" required>
+          <el-input v-model="form.dest_cidr" placeholder="CIDR 或 default">
+            <template #prepend>→</template>
+          </el-input>
+        </el-form-item>
+        <el-form-item label="下一跳 (via)">
+          <el-input v-model="form.gateway" placeholder="可选；可与 on-link 同时使用" />
+        </el-form-item>
+        <el-form-item label="on-link">
+          <el-switch v-model="form.on_link" />
+          <span class="muted hint">
+            勾选后，即便 via 与出接口不在同一直连子网，也会以 onlink 强制下发；典型如 PtP 隧道。
+          </span>
+        </el-form-item>
+        <el-form-item label="metric">
+          <el-input-number v-model="form.metric" :min="0" :max="4294967295" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="路由表 table">
+          <el-input-number v-model="form.route_table" :min="0" :max="4294967295" controls-position="right" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="form.remark" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="dlg = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="save">保存</el-button>
+      </template>
+    </el-dialog>
+  </div>
+</template>
+
+<style scoped>
+.page {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 12px;
+}
+.kpi {
+  background: var(--pe-card);
+  border: 1px solid var(--pe-border-soft);
+  border-radius: var(--pe-radius);
+  padding: 12px 14px;
+  box-shadow: var(--pe-shadow-sm);
+}
+.kpi-label { font-size: 12px; color: var(--pe-text-mute); }
+.kpi-value { font-size: 22px; font-weight: 700; margin-top: 2px; color: var(--pe-text); }
+.kpi-hint { font-size: 11px; color: var(--pe-text-mute); margin-top: 2px; }
+.kpi-hint.ok { color: var(--el-color-success); }
+.kpi-hint.err { color: var(--el-color-danger); }
+
+.route-tabs { background: var(--pe-card); }
+.toolbar {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+.toolbar .lbl { color: var(--pe-text-mute); font-size: 12px; }
+.spacer { flex: 1; }
+
+.if-cell { display: flex; gap: 6px; align-items: center; }
+.if-name { font-weight: 600; }
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+.muted { color: var(--pe-text-mute); }
+.hint { margin-left: 8px; font-size: 12px; color: var(--pe-text-mute); }
+.sel-bar { display: flex; gap: 8px; align-items: center; padding: 6px 0; }
+.cust { font-weight: 500; }
+.ipline { color: var(--pe-text-mute); font-size: 11px; }
+
+.steps { margin-bottom: 14px; }
+.deploy-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+  align-items: center;
+}
+.dep-card { height: 100%; }
+.dep-card .card-hd { display: flex; gap: 8px; align-items: center; }
+.dep-card .card-hd .title { font-weight: 600; }
+.wg-card .hint {
+  font-size: 12px;
+  color: var(--pe-text-mute);
+  margin: 0 0 12px;
+  background: #fff8e6;
+  border: 1px solid #f8e2a8;
+  padding: 8px 10px;
+  border-radius: 6px;
+}
+.wg-iface {
+  border: 1px solid var(--pe-border-soft);
+  border-radius: 6px;
+  padding: 8px 10px;
+  margin-bottom: 10px;
+  background: #f8fafc;
+}
+.wg-iface-hd {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
+}
+.wg-iface-hd .path {
+  color: var(--pe-text-mute);
+}
+.wg-block {
+  background: #0f172a;
+  color: #e2e8f0;
+  padding: 8px 10px;
+  border-radius: 4px;
+  margin: 0 0 6px;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+.wg-cmds {
+  color: var(--pe-text-mute);
+  font-size: 11px;
+  background: #ffffff;
+  padding: 6px 8px;
+  border-radius: 4px;
+  border: 1px dashed var(--pe-border-soft);
+}
+.small { font-size: 12px; }
+.yaml-wrap { margin-bottom: 8px; }
+.mono :deep(textarea) {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+  font-size: 12px;
+}
+.err-note { color: var(--el-color-danger); font-size: 12px; margin-top: 8px; }
+.raw {
+  white-space: pre-wrap;
+  font-size: 12px;
+  max-height: 320px;
+  overflow: auto;
+  background: #f8fafc;
+  padding: 10px;
+  border-radius: 6px;
+  margin: 0;
+}
+</style>

@@ -1,3 +1,5 @@
+import ipaddress
+
 from rest_framework import serializers
 
 from interfacemanage.models import (
@@ -93,6 +95,11 @@ class DesiredTunnelConfigSerializer(serializers.ModelSerializer):
     customer_code = serializers.CharField(source='customer.code', read_only=True, default=None)
     customer_name = serializers.CharField(source='customer.name', read_only=True, default=None)
 
+    # 派生字段：从 spec 抽取，便于前端 UI 联动（按客户选接口、自动建议下一跳）
+    local_addresses = serializers.SerializerMethodField(read_only=True)
+    peer_ip = serializers.SerializerMethodField(read_only=True)
+    peer_endpoint = serializers.SerializerMethodField(read_only=True)
+
     class Meta:
         model = DesiredTunnelConfig
         fields = [
@@ -103,8 +110,77 @@ class DesiredTunnelConfigSerializer(serializers.ModelSerializer):
             'customer',
             'customer_code',
             'customer_name',
+            'local_addresses',
+            'peer_ip',
+            'peer_endpoint',
             'remark',
             'created_at',
             'updated_at',
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at', 'customer_code', 'customer_name']
+        read_only_fields = [
+            'id',
+            'created_at',
+            'updated_at',
+            'customer_code',
+            'customer_name',
+            'local_addresses',
+            'peer_ip',
+            'peer_endpoint',
+        ]
+
+    # ---- 派生字段实现 ----
+    @staticmethod
+    def _addrs(obj) -> list[str]:
+        spec = obj.spec or {}
+        t = spec.get('netplan_tunnel') or {}
+        a = t.get('addresses')
+        if isinstance(a, str):
+            return [a.strip()] if a.strip() else []
+        if isinstance(a, list):
+            return [str(x).strip() for x in a if str(x).strip()]
+        return []
+
+    def get_local_addresses(self, obj) -> list[str]:
+        return self._addrs(obj)
+
+    def get_peer_ip(self, obj):
+        """对 /30 或 /31 这类 PtP 子网，从本端 addresses 推断对端 IP（作为路由 via 的建议值）。
+
+        - /31：两端就是 net[0] 与 net[1]
+        - /30：两个 host 互算
+        - 其他掩码：不建议（返回 None）
+        """
+        addrs = self._addrs(obj)
+        if not addrs:
+            return None
+        try:
+            iface = ipaddress.ip_interface(addrs[0])
+        except Exception:
+            return None
+        net = iface.network
+        local = iface.ip
+        try:
+            if net.prefixlen in (31, 127):
+                cands = [net[0], net[1]]
+            elif net.prefixlen in (30, 126):
+                cands = list(net.hosts())
+            else:
+                return None
+        except Exception:
+            return None
+        for c in cands:
+            if c != local:
+                return str(c)
+        return None
+
+    def get_peer_endpoint(self, obj):
+        """对端"外部 endpoint"：GRE/VXLAN 的 remote 公网 IP；WG 的 peers[0].endpoint。"""
+        spec = obj.spec or {}
+        t = spec.get('netplan_tunnel') or {}
+        if obj.kind == DesiredTunnelConfig.Kind.WIREGUARD:
+            peers = t.get('peers') or []
+            if peers and isinstance(peers, list):
+                ep = peers[0].get('endpoint') if isinstance(peers[0], dict) else None
+                return ep or None
+            return None
+        return t.get('remote') or None

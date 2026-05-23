@@ -20,6 +20,15 @@ const loading = ref(false)
 const rows = ref([])
 const customers = ref([])
 const ifaces = ref([])
+// 隧道意图（按客户过滤接口 + 推断对端 IP 的核心来源）
+const tunnels = ref([])
+const tunnelByIfname = computed(() => {
+  const m = new Map()
+  for (const t of tunnels.value || []) {
+    if (t?.ifname) m.set(t.ifname, t)
+  }
+  return m
+})
 
 const STATE_META = {
   available: { label: '可用', type: 'success' },
@@ -62,14 +71,16 @@ function customerName(code) {
 async function load() {
   loading.value = true
   try {
-    const [ips, cust, iff] = await Promise.all([
+    const [ips, cust, iff, tun] = await Promise.all([
       resourceApi.listIps(),
       resourceApi.listCustomers(),
       interfaceApi.liveInventory({}).then((r) => r.data?.interfaces || []).catch(() => []),
+      interfaceApi.listDesiredTunnels().catch(() => []),
     ])
     rows.value = ips
     customers.value = cust
     ifaces.value = iff
+    tunnels.value = Array.isArray(tun) ? tun : []
   } catch (e) {
     ElMessage.error(e?.response?.data?.detail || e.message || '加载失败')
   } finally {
@@ -77,32 +88,91 @@ async function load() {
   }
 }
 
-// ---- 录入可用 IP ----
+// ---- 录入 IP（单条 / 范围 / 列表） ----
 const addDlg = ref(false)
-const addForm = reactive({ address: '', state: 'available', subnet_label: '' })
+const addForm = reactive({
+  mode: 'single', // single | range | list
+  address: '',
+  range_start: '',
+  range_end: '',
+  addresses_text: '',
+  state: 'available',
+  subnet_label: '',
+})
+const addBusy = ref(false)
 function openAdd() {
+  addForm.mode = 'single'
   addForm.address = ''
+  addForm.range_start = ''
+  addForm.range_end = ''
+  addForm.addresses_text = ''
   addForm.state = 'available'
   addForm.subnet_label = ''
   addDlg.value = true
 }
+function _parseAddrText(text) {
+  if (!text) return []
+  return String(text)
+    .split(/[\s,;\n\t]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+}
 async function createRaw() {
-  if (!addForm.address) {
-    ElMessage.warning('请填写 IP 地址')
-    return
-  }
+  addBusy.value = true
   try {
-    await resourceApi.createIp({
-      address: addForm.address,
-      state: addForm.state,
-      subnet_label: addForm.subnet_label,
-    })
-    ElMessage.success('已录入')
+    if (addForm.mode === 'single') {
+      if (!addForm.address) {
+        ElMessage.warning('请填写 IP 地址')
+        return
+      }
+      await resourceApi.createIp({
+        address: addForm.address,
+        state: addForm.state,
+        subnet_label: addForm.subnet_label,
+      })
+      ElMessage.success('已录入')
+    } else {
+      const payload = {
+        state: addForm.state,
+        subnet_label: addForm.subnet_label || '',
+      }
+      if (addForm.mode === 'range') {
+        if (!addForm.range_start || !addForm.range_end) {
+          ElMessage.warning('请填写起始 IP 与结束 IP')
+          return
+        }
+        payload.start = addForm.range_start
+        payload.end = addForm.range_end
+      } else {
+        const items = _parseAddrText(addForm.addresses_text)
+        if (items.length === 0) {
+          ElMessage.warning('请粘贴或输入至少一个 IP')
+          return
+        }
+        payload.addresses = items
+      }
+      const { data } = await resourceApi.bulkCreateIps(payload)
+      const ok = data?.created?.length || 0
+      const sk = data?.skipped?.length || 0
+      const er = data?.errors?.length || 0
+      if (er > 0) {
+        ElMessage.warning(`已录入 ${ok}，跳过 ${sk}，失败 ${er}（详情见下方日志）`)
+        console.warn('[bulk-create errors]', data?.errors)
+      } else if (sk > 0) {
+        ElMessage.success(`已录入 ${ok}，跳过 ${sk}（已存在）`)
+      } else {
+        ElMessage.success(`已录入 ${ok} 条 IP`)
+      }
+    }
     addDlg.value = false
     await load()
   } catch (e) {
     const d = e?.response?.data
-    ElMessage.error(d ? JSON.stringify(d) : e.message || '创建失败')
+    ElMessage.error(
+      d?.detail || (typeof d === 'string' ? d : JSON.stringify(d || {})) || e.message || '创建失败',
+    )
+  } finally {
+    addBusy.value = false
   }
 }
 
@@ -334,6 +404,326 @@ function openAllocateWithReset(row) {
   openAllocate(row)
   allocateDlg.value = true
 }
+
+// ---- 批量操作 ----
+const selectedRows = ref([])
+const tableRef = ref(null)
+function onSelectionChange(rows) {
+  selectedRows.value = rows || []
+}
+const selectedAddresses = computed(() => selectedRows.value.map((r) => r.address))
+const selStats = computed(() => {
+  const s = { total: selectedRows.value.length, available: 0, reserved: 0, allocated: 0, recycled: 0 }
+  for (const r of selectedRows.value) if (r.state in s) s[r.state] += 1
+  return s
+})
+const selAllocatableCount = computed(() => selStats.value.available + selStats.value.reserved)
+const selReleasableCount = computed(() => selStats.value.allocated)
+const selRecyclableCount = computed(
+  () => selStats.value.available + selStats.value.reserved + selStats.value.allocated,
+)
+function clearSelection() {
+  tableRef.value?.clearSelection?.()
+  selectedRows.value = []
+}
+
+// 批量分配
+const bulkAllocDlg = ref(false)
+const bulkAllocForm = reactive({
+  customer_code: '',
+  interface_code: '',
+  subnet_label: '',
+  allow_from_reserved: true,
+  // 同步创建路由
+  create_route: false,
+  apply_to_system: true,
+  persist_to_netplan: true,
+  route: {
+    dest_cidr_mode: 'host', // host | custom
+    dest_cidr: '',
+    interface_name: '',
+    gateway: '',
+    on_link: false,
+    metric: null,
+    route_table: null,
+    netplan_device_class: 'tunnels',
+    remark: '',
+  },
+})
+const bulkAllocBusy = ref(false)
+function openBulkAllocate() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先在表格中选择要分配的 IP')
+    return
+  }
+  if (selAllocatableCount.value === 0) {
+    ElMessage.warning('当前选中项均不可分配（仅 available / reserved 可分配）')
+    return
+  }
+  bulkAllocForm.customer_code = ''
+  bulkAllocForm.interface_code = ''
+  bulkAllocForm.subnet_label = ''
+  bulkAllocForm.allow_from_reserved = true
+  bulkAllocForm.create_route = false
+  bulkAllocForm.apply_to_system = true
+  bulkAllocForm.persist_to_netplan = true
+  bulkAllocForm.route.dest_cidr_mode = 'host'
+  bulkAllocForm.route.dest_cidr = ''
+  bulkAllocForm.route.interface_name = ''
+  bulkAllocForm.route.gateway = ''
+  bulkAllocForm.route.on_link = false
+  bulkAllocForm.route.metric = null
+  bulkAllocForm.route.route_table = null
+  bulkAllocForm.route.netplan_device_class = 'tunnels'
+  bulkAllocForm.route.remark = ''
+  bulkAllocDlg.value = true
+}
+function _classifyIface(ifname) {
+  const t = tunnelByIfname.value.get(ifname)
+  if (t) return 'tunnels'
+  const it = ifaces.value.find((x) => x.ifname === ifname)
+  const k = (it?.kind || '').toLowerCase()
+  if (['gre', 'gretap', 'vxlan', 'ip6gre', 'wireguard', 'geneve'].includes(k)) return 'tunnels'
+  if (k === 'bridge') return 'bridges'
+  if (k === 'bond') return 'bonds'
+  if (k === 'vlan') return 'vlans'
+  return 'ethernets'
+}
+function onBulkAllocIfaceSelected(name) {
+  bulkAllocForm.route.interface_name = name || ''
+  bulkAllocForm.route.netplan_device_class = _classifyIface(name)
+  // 自动建议下一跳：从隧道意图中读出 PtP 对端 IP；若未在意图中（如以太网）就不动
+  const t = tunnelByIfname.value.get(name)
+  if (t && t.peer_ip && !bulkAllocForm.route.gateway) {
+    bulkAllocForm.route.gateway = t.peer_ip
+    // PtP 隧道场景默认开启 onlink（即使本端没有同段 IP 也能落地）
+    if (!bulkAllocForm.route.on_link) bulkAllocForm.route.on_link = true
+  }
+}
+function onBulkAllocCustomerChange(code) {
+  bulkAllocForm.customer_code = code || ''
+  // 切换客户时清空非该客户的接口选择
+  const visible = customerInterfaces.value.map((x) => x.ifname)
+  if (bulkAllocForm.interface_code && !visible.includes(bulkAllocForm.interface_code)) {
+    bulkAllocForm.interface_code = ''
+  }
+  if (bulkAllocForm.route.interface_name && !visible.includes(bulkAllocForm.route.interface_name)) {
+    bulkAllocForm.route.interface_name = ''
+    bulkAllocForm.route.gateway = ''
+  }
+}
+
+// 按选中的客户过滤可用接口（来自 desired-tunnels，客户匹配；管理员未选客户时显示全部隧道）
+const customerInterfaces = computed(() => {
+  const code = bulkAllocForm.customer_code
+  if (!code) return tunnels.value
+  return tunnels.value.filter((t) => (t.customer_code || '') === code)
+})
+async function submitBulkAllocate() {
+  if (!bulkAllocForm.customer_code) {
+    ElMessage.warning('请选择客户')
+    return
+  }
+  const addrs = selectedRows.value
+    .filter((r) => r.state === 'available' || (bulkAllocForm.allow_from_reserved && r.state === 'reserved'))
+    .map((r) => r.address)
+  if (addrs.length === 0) {
+    ElMessage.warning('选中项中没有可分配的 IP（请检查状态或允许预留→分配）')
+    return
+  }
+  if (bulkAllocForm.create_route) {
+    const ifn = (bulkAllocForm.route.interface_name || bulkAllocForm.interface_code || '').trim()
+    if (!ifn) {
+      ElMessage.warning('已开启「同步创建路由」，请填写出接口')
+      return
+    }
+    if (bulkAllocForm.route.dest_cidr_mode === 'custom' && !bulkAllocForm.route.dest_cidr) {
+      ElMessage.warning('自定义目标 CIDR 模式下必须填写目标 CIDR')
+      return
+    }
+  }
+  bulkAllocBusy.value = true
+  try {
+    const payload = {
+      addresses: addrs,
+      customer_code: bulkAllocForm.customer_code,
+      interface_code: bulkAllocForm.interface_code || '',
+      subnet_label: bulkAllocForm.subnet_label || '',
+      allow_from_reserved: bulkAllocForm.allow_from_reserved,
+    }
+    if (bulkAllocForm.create_route) {
+      payload.route_template = {
+        dest_cidr_mode: bulkAllocForm.route.dest_cidr_mode,
+        dest_cidr: bulkAllocForm.route.dest_cidr || '',
+        interface_name: bulkAllocForm.route.interface_name || bulkAllocForm.interface_code || '',
+        gateway: bulkAllocForm.route.gateway || null,
+        on_link: bulkAllocForm.route.on_link,
+        metric: bulkAllocForm.route.metric,
+        route_table: bulkAllocForm.route.route_table,
+        netplan_device_class: bulkAllocForm.route.netplan_device_class || 'tunnels',
+        remark: bulkAllocForm.route.remark || '',
+      }
+      payload.apply_to_system = !!bulkAllocForm.apply_to_system
+      payload.persist_to_netplan = !!bulkAllocForm.persist_to_netplan
+    }
+    const { data } = await resourceApi.bulkAllocateIps(payload)
+    const ok = data?.succeeded?.length || 0
+    const er = data?.failed?.length || 0
+    const routeCnt = data?.route_ids?.length || 0
+    const apply = data?.apply_result
+    let extra = ''
+    if (routeCnt > 0) {
+      extra += `；同步创建路由 ${routeCnt} 条`
+      if (apply) {
+        const appliedCnt = apply?.applied?.length || 0
+        const failedCnt = apply?.failed?.length || 0
+        extra += `，已即时下发到系统 ${appliedCnt} 条`
+        if (failedCnt > 0) extra += `（${failedCnt} 条下发失败）`
+        const persist = apply?.netplan_persist
+        if (persist) {
+          extra += persist.ok ? '；已持久化到 netplan' : '；netplan 持久化失败'
+        }
+      }
+    }
+    if (er > 0) {
+      ElMessage.warning(`批量分配：成功 ${ok}，失败 ${er}${extra}（详情见控制台）`)
+      console.warn('[bulk-allocate failures]', data?.failed, 'apply_result=', apply)
+    } else if (apply && apply.failed && apply.failed.length > 0) {
+      ElMessage.warning(`批量分配成功：${ok} 条${extra}（详情见控制台）`)
+      console.warn('[bulk-allocate apply failures]', apply.failed)
+    } else {
+      ElMessage.success(`批量分配成功：${ok} 条${extra}`)
+    }
+    bulkAllocDlg.value = false
+    clearSelection()
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d?.detail || (typeof d === 'string' ? d : JSON.stringify(d || {})) || e.message || '批量分配失败')
+  } finally {
+    bulkAllocBusy.value = false
+  }
+}
+
+// 批量释放
+async function bulkRelease() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先在表格中选择要释放的 IP')
+    return
+  }
+  const addrs = selectedRows.value.filter((r) => r.state === 'allocated').map((r) => r.address)
+  if (addrs.length === 0) {
+    ElMessage.warning('选中项中没有「已分配」的 IP（仅 allocated 可释放）')
+    return
+  }
+  try {
+    await ElMessageBox.confirm(
+      `将释放 ${addrs.length} 个 IP：\n  · 清空客户/接口绑定；\n  · 同步从数据库删除关联路由意图；\n  · 同步从内核执行 ip route del 删除已下发的路由。\n继续？`,
+      '批量释放 IP',
+      { type: 'warning', confirmButtonText: '释放', cancelButtonText: '取消' },
+    )
+  } catch {
+    return
+  }
+  try {
+    const { data } = await resourceApi.bulkReleaseIps({ addresses: addrs })
+    const ok = data?.succeeded?.length || 0
+    const er = data?.failed?.length || 0
+    const removed = (data?.succeeded || []).reduce(
+      (sum, x) => sum + (Array.isArray(x.removed_routes) ? x.removed_routes.length : 0),
+      0,
+    )
+    const kernelSteps = (data?.succeeded || []).flatMap((x) =>
+      Array.isArray(x.kernel_steps) ? x.kernel_steps : [],
+    )
+    const kernelOk = kernelSteps.filter((s) => s && s.ok).length
+    const kernelFail = kernelSteps.filter((s) => s && !s.ok).length
+    let extra = ` 删除路由 ${removed} 条`
+    if (kernelSteps.length > 0) {
+      extra += `（内核同步 ${kernelOk}/${kernelSteps.length}`
+      if (kernelFail > 0) extra += `，失败 ${kernelFail}`
+      extra += `）`
+    }
+    if (data?.netplan_persist) {
+      extra += data.netplan_persist.ok ? '；netplan 已同步刷新' : '；netplan 同步失败'
+    }
+    if (er > 0 || kernelFail > 0) {
+      ElMessage.warning(`批量释放：成功 ${ok}，失败 ${er}；${extra}`)
+      if (kernelFail > 0) console.warn('[bulk-release kernel failures]', kernelSteps.filter((s) => !s.ok))
+      if (er > 0) console.warn('[bulk-release failures]', data?.failed)
+    } else {
+      ElMessage.success(`批量释放成功：${ok} 条；${extra}`)
+    }
+    clearSelection()
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d?.detail || (typeof d === 'string' ? d : JSON.stringify(d || {})) || e.message || '批量释放失败')
+  }
+}
+
+// 批量回收
+const bulkRecycleDlg = ref(false)
+const bulkRecycleForm = reactive({ reason: '' })
+function openBulkRecycle() {
+  if (selectedRows.value.length === 0) {
+    ElMessage.warning('请先在表格中选择要回收的 IP')
+    return
+  }
+  const cands = selectedRows.value.filter((r) => r.state !== 'recycled')
+  if (cands.length === 0) {
+    ElMessage.warning('选中项均已回收，无需重复操作')
+    return
+  }
+  bulkRecycleForm.reason = ''
+  bulkRecycleDlg.value = true
+}
+async function submitBulkRecycle() {
+  const addrs = selectedRows.value.filter((r) => r.state !== 'recycled').map((r) => r.address)
+  if (addrs.length === 0) {
+    ElMessage.warning('没有可回收的 IP')
+    return
+  }
+  try {
+    const { data } = await resourceApi.bulkRecycleIps({
+      addresses: addrs,
+      reason: bulkRecycleForm.reason || '',
+    })
+    const ok = data?.succeeded?.length || 0
+    const er = data?.failed?.length || 0
+    const removed = (data?.succeeded || []).reduce(
+      (sum, x) => sum + (Array.isArray(x.removed_routes) ? x.removed_routes.length : 0),
+      0,
+    )
+    const kernelSteps = (data?.succeeded || []).flatMap((x) =>
+      Array.isArray(x.kernel_steps) ? x.kernel_steps : [],
+    )
+    const kernelOk = kernelSteps.filter((s) => s && s.ok).length
+    const kernelFail = kernelSteps.filter((s) => s && !s.ok).length
+    let extra = ` 删除路由 ${removed} 条`
+    if (kernelSteps.length > 0) {
+      extra += `（内核同步 ${kernelOk}/${kernelSteps.length}`
+      if (kernelFail > 0) extra += `，失败 ${kernelFail}`
+      extra += `）`
+    }
+    if (data?.netplan_persist) {
+      extra += data.netplan_persist.ok ? '；netplan 已同步刷新' : '；netplan 同步失败'
+    }
+    if (er > 0 || kernelFail > 0) {
+      ElMessage.warning(`批量回收：成功 ${ok}，失败 ${er}；${extra}`)
+      if (kernelFail > 0) console.warn('[bulk-recycle kernel failures]', kernelSteps.filter((s) => !s.ok))
+      if (er > 0) console.warn('[bulk-recycle failures]', data?.failed)
+    } else {
+      ElMessage.success(`批量回收成功：${ok} 条；${extra}`)
+    }
+    bulkRecycleDlg.value = false
+    clearSelection()
+    await load()
+  } catch (e) {
+    const d = e?.response?.data
+    ElMessage.error(d?.detail || (typeof d === 'string' ? d : JSON.stringify(d || {})) || e.message || '批量回收失败')
+  }
+}
 </script>
 
 <template>
@@ -384,8 +774,55 @@ function openAllocateWithReset(row) {
       <span class="muted">显示 {{ filtered.length }} / {{ rows.length }}</span>
     </div>
 
+    <!-- 批量操作栏（仅在选中时显示） -->
+    <div v-if="selectedRows.length > 0" class="sel-bar">
+      <span class="sel-info">
+        已选 <b>{{ selectedRows.length }}</b> 项
+        <span class="muted">
+          （可用 {{ selStats.available }} · 预留 {{ selStats.reserved }} · 已分配 {{ selStats.allocated }} · 回收 {{ selStats.recycled }}）
+        </span>
+      </span>
+      <el-button
+        type="primary"
+        size="small"
+        :icon="Promotion"
+        :disabled="selAllocatableCount === 0"
+        @click="openBulkAllocate"
+      >
+        批量分配 ({{ selAllocatableCount }})
+      </el-button>
+      <el-button
+        type="success"
+        size="small"
+        :disabled="selReleasableCount === 0"
+        @click="bulkRelease"
+      >
+        批量释放 ({{ selReleasableCount }})
+      </el-button>
+      <el-button
+        type="warning"
+        size="small"
+        :icon="CircleClose"
+        :disabled="selRecyclableCount === 0"
+        @click="openBulkRecycle"
+      >
+        批量回收 ({{ selRecyclableCount }})
+      </el-button>
+      <el-button size="small" plain @click="clearSelection">取消选择</el-button>
+    </div>
+
     <!-- 列表 -->
-    <el-table :data="filtered" border v-loading="loading" size="small" stripe>
+    <el-table
+      :data="filtered"
+      border
+      v-loading="loading"
+      size="small"
+      stripe
+      ref="tableRef"
+      :row-key="(row) => row.id || row.address"
+      @selection-change="onSelectionChange"
+    >
+      <el-table-column type="selection" width="44" fixed reserve-selection />
       <el-table-column prop="address" label="IP" width="160" fixed>
         <template #default="{ row }">
           <code class="mono">{{ row.address }}</code>
@@ -452,12 +889,46 @@ function openAllocateWithReset(row) {
       </el-table-column>
     </el-table>
 
-    <!-- 录入 IP -->
-    <el-dialog v-model="addDlg" title="录入 IP" width="480px">
+    <!-- 录入 IP（单条 / 范围 / 列表） -->
+    <el-dialog v-model="addDlg" title="录入 IP" width="560px">
       <el-form label-width="100px">
-        <el-form-item label="IP 地址" required>
-          <el-input v-model="addForm.address" placeholder="例如 10.0.0.10" />
+        <el-form-item label="录入方式">
+          <el-radio-group v-model="addForm.mode">
+            <el-radio-button label="single">单条</el-radio-button>
+            <el-radio-button label="range">起始-结束</el-radio-button>
+            <el-radio-button label="list">多个/列表</el-radio-button>
+          </el-radio-group>
         </el-form-item>
+
+        <template v-if="addForm.mode === 'single'">
+          <el-form-item label="IP 地址" required>
+            <el-input v-model="addForm.address" placeholder="例如 10.0.0.10" />
+          </el-form-item>
+        </template>
+
+        <template v-else-if="addForm.mode === 'range'">
+          <el-form-item label="起始 IP" required>
+            <el-input v-model="addForm.range_start" placeholder="例如 10.0.0.10" />
+          </el-form-item>
+          <el-form-item label="结束 IP" required>
+            <el-input v-model="addForm.range_end" placeholder="例如 10.0.0.30（含）" />
+          </el-form-item>
+          <el-alert type="info" :closable="false" show-icon style="margin-bottom: 10px">
+            将创建 [起始, 结束] 闭区间内所有 IP；已存在的地址会自动跳过。单次最多 1024 条。
+          </el-alert>
+        </template>
+
+        <template v-else>
+          <el-form-item label="IP 列表" required>
+            <el-input
+              v-model="addForm.addresses_text"
+              type="textarea"
+              :rows="6"
+              placeholder="支持空格、逗号、分号或换行分隔，例如&#10;10.0.0.10&#10;10.0.0.11,10.0.0.12&#10;10.0.0.20 10.0.0.21"
+            />
+          </el-form-item>
+        </template>
+
         <el-form-item label="初始状态">
           <el-radio-group v-model="addForm.state">
             <el-radio-button label="available">可用</el-radio-button>
@@ -470,7 +941,179 @@ function openAllocateWithReset(row) {
       </el-form>
       <template #footer>
         <el-button @click="addDlg = false">取消</el-button>
-        <el-button type="primary" @click="createRaw">创建</el-button>
+        <el-button type="primary" :loading="addBusy" @click="createRaw">
+          {{ addForm.mode === 'single' ? '创建' : '批量创建' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量分配 -->
+    <el-dialog v-model="bulkAllocDlg" title="批量分配 IP（可联动路由）" width="680px" top="6vh">
+      <el-alert type="info" :closable="false" show-icon style="margin-bottom: 12px">
+        将把当前选中的 <b>{{ selAllocatableCount }}</b> 个可分配 IP 一次性分配给同一客户。
+        已分配 / 已回收的条目会自动跳过。
+      </el-alert>
+      <el-form label-width="130px" size="small">
+        <el-divider content-position="left">IP 归属</el-divider>
+        <el-form-item label="客户" required>
+          <el-select
+            :model-value="bulkAllocForm.customer_code"
+            filterable
+            placeholder="必选"
+            @update:model-value="onBulkAllocCustomerChange"
+          >
+            <el-option v-for="c in customers" :key="c.id" :label="`${c.code} — ${c.name}`" :value="c.code" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="接口（可选）">
+          <el-select
+            v-model="bulkAllocForm.interface_code"
+            filterable
+            allow-create
+            clearable
+            :placeholder="bulkAllocForm.customer_code ? '从该客户的隧道意图中选择，也可手填接口编码' : '请先选择客户'"
+          >
+            <el-option
+              v-for="it in customerInterfaces"
+              :key="it.ifname"
+              :label="`${it.ifname}  (${it.kind || '?'})${it.peer_ip ? ' · 对端 ' + it.peer_ip : ''}`"
+              :value="it.ifname"
+            />
+          </el-select>
+          <span v-if="bulkAllocForm.customer_code && customerInterfaces.length === 0" class="muted hint">
+            该客户暂未关联任何隧道意图；可在「接口管理 → 隧道意图」绑定客户后再回来
+          </span>
+        </el-form-item>
+        <el-form-item label="网段标签">
+          <el-input v-model="bulkAllocForm.subnet_label" placeholder="可选；批量覆盖到所有选中 IP" />
+        </el-form-item>
+        <el-form-item label="允许预留→分配">
+          <el-switch v-model="bulkAllocForm.allow_from_reserved" />
+        </el-form-item>
+
+        <el-divider content-position="left">
+          同步创建路由
+          <el-switch v-model="bulkAllocForm.create_route" style="margin-left: 12px" />
+        </el-divider>
+        <template v-if="bulkAllocForm.create_route">
+          <el-form-item label="目标 CIDR">
+            <el-radio-group v-model="bulkAllocForm.route.dest_cidr_mode">
+              <el-radio-button label="host">每 IP 一条 host 路由（/32）</el-radio-button>
+              <el-radio-button label="custom">自定义同一 CIDR</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <el-form-item
+            v-if="bulkAllocForm.route.dest_cidr_mode === 'custom'"
+            label="自定义 CIDR"
+            required
+          >
+            <el-input v-model="bulkAllocForm.route.dest_cidr" placeholder="例如 10.20.30.0/24 或 default" />
+          </el-form-item>
+
+          <el-form-item label="出接口" required>
+            <el-select
+              :model-value="bulkAllocForm.route.interface_name || bulkAllocForm.interface_code"
+              filterable
+              allow-create
+              clearable
+              placeholder="选择接口或手填接口编码（默认沿用上面的接口；选择后自动推断对端 IP）"
+              @update:model-value="onBulkAllocIfaceSelected"
+            >
+              <el-option
+                v-for="it in customerInterfaces"
+                :key="it.ifname"
+                :label="`${it.ifname}  (${it.kind || '?'})${it.peer_ip ? ' · 对端 ' + it.peer_ip : ''}`"
+                :value="it.ifname"
+              />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="下一跳 (via)">
+            <el-input
+              v-model="bulkAllocForm.route.gateway"
+              :placeholder="
+                tunnelByIfname.get(bulkAllocForm.route.interface_name)?.peer_ip
+                  ? '建议：' + tunnelByIfname.get(bulkAllocForm.route.interface_name).peer_ip + '（已为本接口对端自动推断）'
+                  : '可选；可与 on-link 同时使用'
+              "
+            />
+            <span
+              v-if="tunnelByIfname.get(bulkAllocForm.route.interface_name)?.peer_ip
+                && bulkAllocForm.route.gateway === tunnelByIfname.get(bulkAllocForm.route.interface_name).peer_ip"
+              class="muted hint"
+            >
+              已自动填入隧道意图中本端 addresses 推断的对端 IP；如需修改可直接覆盖
+            </span>
+          </el-form-item>
+          <el-form-item label="on-link">
+            <el-switch v-model="bulkAllocForm.route.on_link" />
+            <span class="muted hint">PtP 隧道场景请勾选；不勾选时若 via 不直连内核会拒绝</span>
+          </el-form-item>
+          <el-row :gutter="12">
+            <el-col :span="12">
+              <el-form-item label="metric">
+                <el-input-number v-model="bulkAllocForm.route.metric" :min="0" :max="9999" style="width: 100%" />
+              </el-form-item>
+            </el-col>
+            <el-col :span="12">
+              <el-form-item label="route table">
+                <el-input-number v-model="bulkAllocForm.route.route_table" :min="0" :max="255" style="width: 100%" />
+              </el-form-item>
+            </el-col>
+          </el-row>
+          <el-form-item label="netplan 设备类">
+            <el-select v-model="bulkAllocForm.route.netplan_device_class" style="width: 220px">
+              <el-option label="ethernets" value="ethernets" />
+              <el-option label="tunnels" value="tunnels" />
+              <el-option label="bridges" value="bridges" />
+              <el-option label="vlans" value="vlans" />
+              <el-option label="bonds" value="bonds" />
+            </el-select>
+            <span class="muted hint">通常据所选接口自动匹配，可手动调整</span>
+          </el-form-item>
+          <el-form-item label="备注">
+            <el-input v-model="bulkAllocForm.route.remark" placeholder="可选；同一备注会写入所有新建路由" />
+          </el-form-item>
+          <el-form-item label="即时下发系统">
+            <el-switch v-model="bulkAllocForm.apply_to_system" />
+            <span class="muted hint">
+              开启后将立即对新建路由 ids 执行 ip route replace；不影响其他路由。
+            </span>
+          </el-form-item>
+          <el-form-item label="写入 netplan 持久化">
+            <el-switch
+              v-model="bulkAllocForm.persist_to_netplan"
+              :disabled="!bulkAllocForm.apply_to_system"
+            />
+            <span class="muted hint">
+              在即时下发完成后追加 netplan 片段写入 + netplan generate（不执行 try/apply），
+              使<b>系统重启后路由仍然存在</b>。仅写磁盘配置，不影响其它接口/路由的运行状态。
+            </span>
+          </el-form-item>
+        </template>
+      </el-form>
+      <template #footer>
+        <el-button @click="bulkAllocDlg = false">取消</el-button>
+        <el-button type="primary" :loading="bulkAllocBusy" :icon="Promotion" @click="submitBulkAllocate">
+          确认分配
+          {{ bulkAllocForm.create_route ? '并创建路由' : '' }}
+        </el-button>
+      </template>
+    </el-dialog>
+
+    <!-- 批量回收 -->
+    <el-dialog v-model="bulkRecycleDlg" title="批量回收 IP" width="480px">
+      <el-alert type="warning" :closable="false" show-icon style="margin-bottom: 12px">
+        将把选中的 <b>{{ selRecyclableCount }}</b> 个 IP 标记为「不可分配」；同时删除所有关联的路由意图。
+        已是回收态的条目会自动跳过。
+      </el-alert>
+      <el-form label-width="100px">
+        <el-form-item label="回收原因">
+          <el-input v-model="bulkRecycleForm.reason" placeholder="可选；如 设备退网 / 地址池调整" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="bulkRecycleDlg = false">取消</el-button>
+        <el-button type="warning" @click="submitBulkRecycle">确认回收</el-button>
       </template>
     </el-dialog>
 
@@ -632,6 +1275,18 @@ function openAllocateWithReset(row) {
   gap: 8px;
   align-items: center;
 }
+.sel-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  padding: 8px 12px;
+  border: 1px solid #c6e2ff;
+  background: #ecf5ff;
+  border-radius: var(--pe-radius);
+}
+.sel-bar .sel-info { margin-right: auto; font-size: 13px; }
+.sel-bar .sel-info b { color: #409eff; padding: 0 2px; }
 .muted { color: var(--pe-text-mute); font-size: 12px; }
 .hint { margin-left: 8px; font-size: 11px; }
 .mono { font-family: var(--pe-mono); font-size: 12px; }

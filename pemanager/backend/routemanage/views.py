@@ -110,7 +110,11 @@ class DesiredRouteConfigViewSet(viewsets.ModelViewSet):
         if raw_ids is not None and ids is not None and not ids:
             return Response({'ok': False, 'error': '无可下发的路由（选中集合为空或越权）'},
                             status=status.HTTP_400_BAD_REQUEST)
-        result = netplan_routes.apply_desired_routes_netplan(phase=phase, ids=ids)
+        # 选择性下发场景下可选「持久化到 netplan」：先即时落地内核，再写 netplan 片段+generate（不 try）
+        persist = bool(body.get('persist_to_netplan') or False)
+        result = netplan_routes.apply_desired_routes_netplan(
+            phase=phase, ids=ids, persist_to_netplan=persist,
+        )
         code = status.HTTP_200_OK if result.get('ok') else status.HTTP_400_BAD_REQUEST
         return Response(result, status=code)
 
