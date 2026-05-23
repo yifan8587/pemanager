@@ -3,3 +3,13 @@
 2026-05-23 16:29:45.422 [info] cursor_agent_exec.startup.activation_latency {"durationMs":2432}
 2026-05-23 16:29:45.496 [info] managed_skills.removed {"skill_id":"clone","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
 2026-05-23 16:29:45.523 [info] managed_skills.removed {"skill_id":"automate","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:45.665 [info] LocalCursorRulesService load completed {"durationMs":500,"ruleCount":0}
+2026-05-23 16:29:46.645 [info] CursorPluginsAgentSkillsService load completed {"durationMs":1458,"ruleCount":0,"skillCount":0}
+2026-05-23 16:29:46.692 [info] managed_skills.removed {"skill_id":"cursor","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:46.807 [info] managed_skills.removed {"skill_id":"cursor-blame","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:46.829 [info] managed_skills.removed {"skill_id":"cursor-sdk","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:46.962 [info] managed_skills.removed {"skill_id":"loop","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:46.989 [info] managed_skills.removed {"skill_id":"onboard","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:46.990 [info] managed_skills.removed {"skill_id":"cursor-review-links","reason":"enabled_false","server_enabled":false,"had_manifest_entry":false,"last_synced_ms_ago":null}
+2026-05-23 16:29:47.153 [info] AgentSkillsCursorRulesService load completed {"durationMs":1971,"ruleCount":12,"skillCount":12}
+2026-05-23 16:29:47.155 [info] cursorRulesService.getAllCursorRules

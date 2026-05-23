@@ -1,0 +1,13 @@
+2026-05-23 16:29:46.952 [info] Using existing keys for an index
+2026-05-23 16:29:46.952 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-23 16:29:46.956 [info] Creating Indexing Repo client:  https://repo42.cursor.sh
+2026-05-23 16:29:46.956 [info] Creating repo client with backend url: https://repo42.cursor.sh
+2026-05-23 16:29:46.957 [info] Using existing keys for an index
+2026-05-23 16:29:46.957 [info] InternalRepoInfo constructor with preferredEmbeddingModel 0
+2026-05-23 16:29:46.960 [warning] Failed to get symbolic ref: Failed to execute git
+2026-05-23 16:29:46.961 [warning] Failed to get symbolic ref: Failed to execute git
+2026-05-23 16:29:46.987 [info] Picked default branch from method 1.
+2026-05-23 16:29:46.988 [info] Picked default branch from method 1.
+2026-05-23 16:29:47.019 [info] Starting RepoIndexWatcher for repo: f10cb3fc-41f4-4c90-ac17-271b8320c80b, owner: google-oauth2|user_01JH21R6SFYWQ1EJ84SGZ44AWM
+2026-05-23 16:29:47.019 [error] We currently do not allow indexing the home directory.
+2026-05-23 16:29:47.019 [info] Indexing job successfully done or aborted.

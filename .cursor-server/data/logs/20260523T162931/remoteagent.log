@@ -68,3 +68,4 @@
 2026-05-23 16:29:40.846 [warning] RequestStore#acceptReply was called without receiving a matching request 72
 2026-05-23 16:29:41.542 [error] [File Watcher] Unexpected error: inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory (EUNKNOWN) (path: /root)
 2026-05-23 16:29:41.542 [error] [File Watcher (universal)] inotify_add_watch on '/root/.cursor-server/data/logs/20260519T082058/exthost1/vscode.git' failed: No such file or directory
+2026-05-23 16:29:52.328 [info] [CursorProclistService] Config enabled feature (subsample every 10s)

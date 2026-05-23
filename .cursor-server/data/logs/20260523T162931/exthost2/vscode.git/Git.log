@@ -1,0 +1,45 @@
+2026-05-23 16:29:45.558 [info] [main] 日志级别: Info
+2026-05-23 16:29:45.558 [info] [main] 正在验证在以下位置找到的 git: "/usr/bin/git"
+2026-05-23 16:29:45.591 [info] [main] 使用来自 "/usr/bin/git" 的 git "2.43.0"
+2026-05-23 16:29:45.591 [info] [Model][doInitialScan] Initial repository scan started
+2026-05-23 16:29:45.651 [info] > git rev-parse --show-toplevel [15ms] (getRepositoryRoot)
+2026-05-23 16:29:45.667 [info] > git rev-parse --git-dir --git-common-dir --show-superproject-working-tree [4ms] 
+2026-05-23 16:29:45.688 [info] [Model][openRepository] Opened repository: /root
+2026-05-23 16:29:45.688 [info] [Model][openRepository] Opened repository (kind): repository
+2026-05-23 16:29:45.692 [info] [Model][doInitialScan] Initial repository scan completed - repositories (1), closed repositories (0), parent repositories (0), unsafe repositories (0)
+2026-05-23 16:29:45.712 [info] > git config --get commit.template [8ms] 
+2026-05-23 16:29:46.647 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [926ms] 
+2026-05-23 16:29:46.780 [info] > git check-ignore -v -z --stdin [149ms]
+2026-05-23 16:29:46.782 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [94ms] 
+2026-05-23 16:29:47.174 [info] > git status -z -uall [500ms]
+2026-05-23 16:29:47.235 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [36ms] 
+2026-05-23 16:29:47.252 [info] > git config --get commit.template [34ms] 
+2026-05-23 16:29:47.253 [info] > git config --get --local branch.main.vscode-merge-base [3ms] 
+2026-05-23 16:29:47.253 [warning] [Git][config] git config failed: Failed to execute git
+2026-05-23 16:29:47.344 [info] > git check-ignore -v -z --stdin [175ms]
+2026-05-23 16:29:47.344 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [67ms] 
+2026-05-23 16:29:47.345 [info] > git reflog main --grep-reflog=branch: Created from *. [80ms] 
+2026-05-23 16:29:47.408 [info] > git symbolic-ref --short refs/remotes/origin/HEAD [54ms] 
+2026-05-23 16:29:47.408 [info] fatal: ref refs/remotes/origin/HEAD is not a symbolic ref
+2026-05-23 16:29:47.408 [warning] [Repository][getDefaultBranch] Failed to get default branch details: Failed to execute git.
+2026-05-23 16:29:47.434 [info] > git merge-base refs/heads/main refs/remotes/origin/main [14ms] 
+2026-05-23 16:29:47.465 [info] > git diff --name-status -z --diff-filter=ADMR f3dc33d6521fee6dca59b6ae65ca905aa7beb68d...refs/remotes/origin/main [21ms] 
+2026-05-23 16:29:47.469 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [8ms] 
+2026-05-23 16:29:47.941 [info] > git status -z -uall [487ms]
+2026-05-23 16:29:55.582 [info] > git config --global user.name [2ms] 
+2026-05-23 16:29:55.589 [info] > git config --global user.email [2ms] 
+2026-05-23 16:29:55.589 [info] [main] Stored git author name in global state: yifan8587 <yifan8587@gmail.com>
+2026-05-23 16:30:03.382 [info] > git config --get commit.template [7ms] 
+2026-05-23 16:30:03.384 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [2ms] 
+2026-05-23 16:30:03.401 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-05-23 16:30:03.877 [info] > git status -z -uall [486ms]
+2026-05-23 16:30:03.932 [info] > git merge-base refs/heads/main refs/remotes/origin/main [3ms] 
+2026-05-23 16:30:03.942 [info] > git diff --name-status -z --diff-filter=ADMR f3dc33d6521fee6dca59b6ae65ca905aa7beb68d...refs/remotes/origin/main [2ms] 
+2026-05-23 16:30:09.016 [info] > git show -s --decorate=full --shortstat --format=%H%n%aN%n%aE%n%at%n%ct%n%P%n%D%n%B -z 2ef6dd0b7c648d396aecc0ce3e9fdef7e10c51bc -- [84ms] 
+2026-05-23 16:30:09.027 [info] > git var GIT_COMMITTER_IDENT [1ms] 
+2026-05-23 16:30:09.036 [info] > git check-mailmap yifan8587 <yifan8587@gmail.com> 1779553809 +0000 [1ms] 
+2026-05-23 16:30:09.046 [info] > git merge-base --is-ancestor HEAD @{u} [4ms] 
+2026-05-23 16:32:42.078 [info] > git config --get commit.template [7ms] 
+2026-05-23 16:32:42.079 [info] > git for-each-ref --format=%(refname)%00%(upstream:short)%00%(objectname)%00%(upstream:track)%00%(upstream:remotename)%00%(upstream:remoteref) refs/heads/main refs/remotes/main [3ms] 
+2026-05-23 16:32:42.098 [info] > git for-each-ref --sort -committerdate --format %(refname)%00%(objectname)%00%(*objectname) [2ms] 
+2026-05-23 16:32:42.570 [info] > git status -z -uall [484ms]
